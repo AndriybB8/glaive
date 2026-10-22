@@ -1,0 +1,29 @@
+* text=auto eol=lf
+
+# Windwos 
+*.sln text eol=crlf
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# Linux
+*.sh text eol=lf
+
+# Code
+*.cs text diff=csharp
+*.csproj text
+*.json text
+*.yml text
+*.yaml text
+*.md text diff=markdown
+
+# Binaries
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.webp binary
+*.pdf binary
+*.woff binary
+*.woff2 binary
+*.ttf binary

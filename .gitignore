@@ -426,3 +426,32 @@ FodyWeavers.xsd
 
 # Official VS Code C# Dev Kit Extension exclusion
 #*.lscache
+
+# JetBrains Rider
+.idea/
+*.sln.iml
+
+# Frontend (React / Vite)
+dist/
+coverage/
+*.tsbuildinfo
+.env.*
+!.env.example
+
+
+# JetBrains Rider
+.idea/
+*.sln.iml
+ 
+# Frontend (React / Vite / Tailwind)
+dist/
+coverage/
+*.tsbuildinfo
+.env.*
+!.env.example
+.eslintcache
+.vite/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
