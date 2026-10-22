@@ -1,0 +1,12 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/StudyPlanner.Api/StudyPlanner.Api.csproj" />
+    <Project Path="src/StudyPlanner.Application/StudyPlanner.Application.csproj" />
+    <Project Path="src/StudyPlanner.Domain/StudyPlanner.Domain.csproj" />
+    <Project Path="src/StudyPlanner.Infrastructure/StudyPlanner.Infrastructure.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/StudyPlanner.IntegrationTests/StudyPlanner.IntegrationTests.csproj" />
+    <Project Path="tests/StudyPlanner.UnitTests/StudyPlanner.UnitTests.csproj" />
+  </Folder>
+</Solution>
