@@ -6,7 +6,7 @@ Harmonogramy, listy ToDo, notatki, Pomodoro oraz fiszki generowane z plików PDF
 ```
 /
 Backend/            ASP.NET Core Web API (Clean Architecture)
-Frontend/           ***TODO***
+Frontend/           React + TypeScript (Vite, Tailwind CSS)
 docs/               dokumentacja
 docker-compose.yml  lokalna baza danych PostgreSQL
 ```
@@ -43,7 +43,16 @@ Testy: `dotnet test`
 
 ### 3. Frontend
 
-***TODO***
+W katalogu głównym repozytorium wywołać:
+1. `cd Frontend`
+2. `npm install`
+3. `npm run dev`
+
+Aplikacja działa na `http://localhost:5173`.
+Zapytania na `/api` są przekierowywane do backendu (`http://localhost:5196`), więc backend musi być uruchomiony.
+
+**Build:**  `npm run build`<br>
+**Lint:**   `npm run lint`
 
 ## Zasady pracy
 - Nie pracujemy bezpośrednio na `main`. Zmiany wchodzą przez PR (minimum jedno review).
@@ -56,9 +65,10 @@ Testy: `dotnet test`
 
 ## Technologie
 
-| Obszar         | Technologia                         |
-|----------------|-------------------------------------|
-| Backend        | ASP.NET Core, Entity Framework Core |
-| Baza danych    | PostgreSQL                          |
-| Frontend       | ***TODO***                          |
-| Konteneryzacja | Docker Compose                      |
+| Obszar         | Technologia                           |
+|----------------|---------------------------------------|
+| Backend        | ASP.NET Core, Entity Framework Core   |
+| Baza danych    | PostgreSQL                            |
+| Frontend       | React, TypeScript, Vite, Tailwind CSS |
+| Konteneryzacja | Docker Compose                        |
+
