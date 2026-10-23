@@ -431,18 +431,6 @@ FodyWeavers.xsd
 .idea/
 *.sln.iml
 
-# Frontend (React / Vite)
-dist/
-coverage/
-*.tsbuildinfo
-.env.*
-!.env.example
-
-
-# JetBrains Rider
-.idea/
-*.sln.iml
- 
 # Frontend (React / Vite / Tailwind)
 dist/
 coverage/
