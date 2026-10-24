@@ -1,9 +1,9 @@
+import { NotesPage } from './features/notes/NotesPage'
+
+// Tymczasowo aplikacja pokazuje od razu notatki. Gdy pojawi się routing/nawigacja,
+// NotesPage trafi pod własną ścieżkę (np. /notes).
 function App() {
-  return (
-    <main className="min-h-screen flex items-center justify-center bg-slate-100">
-      <h1 className="text-3xl font-bold text-blue-600">StudyPlanner</h1>
-    </main>
-  )
+  return <NotesPage />
 }
 
 export default App
