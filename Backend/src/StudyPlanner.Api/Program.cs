@@ -1,17 +1,23 @@
+using System.Text.Json;
+using System.Text.Json.Serialization;
 using Microsoft.EntityFrameworkCore;
 using StudyPlanner.Api.Services;
 using StudyPlanner.Application.Common;
 using StudyPlanner.Application.Notes;
 using StudyPlanner.Application.Schedules;
+using StudyPlanner.Application.Tasks;
 using StudyPlanner.Infrastructure.Notes;
 using StudyPlanner.Infrastructure.Persistence;
 using StudyPlanner.Infrastructure.Schedules;
+using StudyPlanner.Infrastructure.Tasks;
 
 var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
 
-builder.Services.AddControllers();
+// Enumy w JSON jako tekst w camelCase (np. "inProgress"), a nie liczby.
+builder.Services.AddControllers()
+    .AddJsonOptions(options => options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter(JsonNamingPolicy.CamelCase)));
 // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
 builder.Services.AddOpenApi();
 
@@ -37,6 +43,8 @@ builder.Services.AddScoped<NoteService>();
 builder.Services.AddSingleton<INoteRepository, InMemoryNoteRepository>();
 builder.Services.AddScoped<ScheduleService>();
 builder.Services.AddScoped<IScheduleRepository, EfScheduleRepository>();
+builder.Services.AddScoped<TaskService>();
+builder.Services.AddScoped<ITaskRepository, EfTaskRepository>();
 
 var app = builder.Build();
 

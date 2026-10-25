@@ -70,6 +70,87 @@ namespace StudyPlanner.Infrastructure.Persistence.Migrations
                             t.HasCheckConstraint("ck_schedules_date_range", "end_date >= start_date");
                         });
                 });
+
+            modelBuilder.Entity("StudyPlanner.Domain.Tasks.TaskItem", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("Description")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)")
+                        .HasColumnName("description");
+
+                    b.Property<DateOnly?>("DueDate")
+                        .HasColumnType("date")
+                        .HasColumnName("due_date");
+
+                    b.Property<string>("Priority")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("priority");
+
+                    b.Property<Guid>("ScheduleId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("schedule_id");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("status");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("title");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("user_id");
+
+                    b.Property<int>("Version")
+                        .IsConcurrencyToken()
+                        .HasColumnType("integer")
+                        .HasColumnName("version");
+
+                    b.HasKey("Id")
+                        .HasName("pk_tasks");
+
+                    b.HasIndex("ScheduleId")
+                        .HasDatabaseName("ix_tasks_schedule_id");
+
+                    b.HasIndex("UserId")
+                        .HasDatabaseName("ix_tasks_user_id");
+
+                    b.ToTable("tasks", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_tasks_priority", "priority IN ('Low', 'Medium', 'High')");
+
+                            t.HasCheckConstraint("ck_tasks_status", "status IN ('ToDo', 'InProgress', 'Done')");
+                        });
+                });
+
+            modelBuilder.Entity("StudyPlanner.Domain.Tasks.TaskItem", b =>
+                {
+                    b.HasOne("StudyPlanner.Domain.Schedules.Schedule", null)
+                        .WithMany()
+                        .HasForeignKey("ScheduleId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_tasks_schedules_schedule_id");
+                });
 #pragma warning restore 612, 618
         }
     }

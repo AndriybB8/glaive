@@ -33,6 +33,11 @@ export function formatDays(days: number): string {
   return days === 1 ? '1 dzień' : `${days} dni`
 }
 
+/** Np. „3 lis 2026”. */
+export function formatDate(isoDate: string): string {
+  return rangeFormat.format(new Date(...parts(isoDate)))
+}
+
 /** Np. „6–12 paź 2026”, „20 paź – 2 lis 2026”, „1 paź 2026 – 1 lut 2027”. */
 export function formatDateRange(startDate: string, endDate: string): string {
   return rangeFormat.formatRange(new Date(...parts(startDate)), new Date(...parts(endDate)))
