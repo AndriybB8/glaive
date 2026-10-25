@@ -56,8 +56,9 @@ export function getNote(id: string): Promise<Note> {
   return request(`${BASE_URL}/${id}`)
 }
 
-export function createNote(draft: Partial<NoteDraft> = {}): Promise<Note> {
-  return request(BASE_URL, { method: 'POST', body: JSON.stringify(draft) })
+/** Tworzy notatkę; z `groupId` od razu trafia do tej grupy. */
+export function createNote(draft: Partial<NoteDraft> = {}, groupId: string | null = null): Promise<Note> {
+  return request(BASE_URL, { method: 'POST', body: JSON.stringify({ ...draft, groupId }) })
 }
 
 export function updateNote(id: string, draft: NoteDraft, version: number): Promise<Note> {
@@ -79,6 +80,14 @@ export function updateNoteOnExit(id: string, draft: NoteDraft, version: number):
     body: JSON.stringify({ ...draft, version }),
     keepalive: true,
   }).catch(() => undefined)
+}
+
+/**
+ * Przenosi notatkę do grupy (`null` = „Bez grupy”). Nie zmienia wersji notatki,
+ * więc nie przeszkadza autozapisowi otwartego edytora.
+ */
+export function moveNoteToGroup(id: string, groupId: string | null): Promise<void> {
+  return request(`${BASE_URL}/${id}/group`, { method: 'PUT', body: JSON.stringify({ groupId }) })
 }
 
 export function deleteNote(id: string): Promise<void> {

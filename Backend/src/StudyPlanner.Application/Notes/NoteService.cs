@@ -1,19 +1,25 @@
 using StudyPlanner.Application.Common;
+using StudyPlanner.Application.NoteGroups;
 using StudyPlanner.Domain.Notes;
 
 namespace StudyPlanner.Application.Notes;
 
-public sealed class NoteService(INoteRepository repository, ICurrentUser currentUser, TimeProvider timeProvider)
+public sealed class NoteService(
+    INoteRepository repository,
+    INoteGroupRepository groupRepository,
+    ICurrentUser currentUser,
+    TimeProvider timeProvider)
 {
     private static readonly NoteError NotFound = new(NoteErrorType.NotFound, "Nie znaleziono notatki.");
+    private static readonly NoteError GroupNotFound = new(NoteErrorType.Validation, "Wybrana grupa nie istnieje. Mogła zostać usunięta.");
 
+    /// <summary>Wszystkie notatki użytkownika (bez treści), od ostatnio zmienionej. Każda ma swoje groupId.</summary>
     public async Task<IReadOnlyList<NoteSummaryDto>> GetAllAsync(CancellationToken cancellationToken)
     {
-        var notes = await repository.GetByAuthorAsync(currentUser.UserId, cancellationToken);
+        var notes = await repository.GetSummariesByAuthorAsync(currentUser.UserId, cancellationToken);
 
         return notes
             .OrderByDescending(n => n.UpdatedAt)
-            .Select(NoteSummaryDto.From)
             .ToList();
     }
 
@@ -36,7 +42,12 @@ public sealed class NoteService(INoteRepository repository, ICurrentUser current
             return NoteResult<NoteDto>.Failure(error);
         }
 
-        var note = Note.Create(currentUser.UserId, title, content, UtcNow());
+        if (request.GroupId is { } groupId && !await groupRepository.ExistsAsync(groupId, currentUser.UserId, cancellationToken))
+        {
+            return NoteResult<NoteDto>.Failure(GroupNotFound);
+        }
+
+        var note = Note.Create(currentUser.UserId, title, content, UtcNow(), request.GroupId);
         await repository.AddAsync(note, cancellationToken);
 
         return NoteResult<NoteDto>.Success(NoteDto.From(note));
@@ -84,6 +95,24 @@ public sealed class NoteService(INoteRepository repository, ICurrentUser current
         }
 
         return NoteResult<NoteDto>.Success(NoteDto.From(note));
+    }
+
+    /// <summary>
+    /// Przenosi notatkę do grupy (null = „Bez grupy”). Nie wymaga wersji i jej nie zmienia,
+    /// więc nie przerywa autozapisu notatki otwartej w edytorze.
+    /// </summary>
+    public async Task<NoteResult<bool>> MoveToGroupAsync(Guid id, MoveNoteRequest request, CancellationToken cancellationToken)
+    {
+        if (request.GroupId is { } groupId && !await groupRepository.ExistsAsync(groupId, currentUser.UserId, cancellationToken))
+        {
+            return NoteResult<bool>.Failure(GroupNotFound);
+        }
+
+        var moved = await repository.MoveToGroupAsync(id, currentUser.UserId, request.GroupId, cancellationToken);
+
+        return moved
+            ? NoteResult<bool>.Success(true)
+            : NoteResult<bool>.Failure(NotFound);
     }
 
     public async Task<NoteResult<bool>> DeleteAsync(Guid id, CancellationToken cancellationToken)

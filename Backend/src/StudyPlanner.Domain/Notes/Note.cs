@@ -13,6 +13,12 @@ public class Note
 
     public Guid AuthorId { get; private set; }
 
+    /// <summary>
+    /// Grupa (folder), do której należy notatka. Null = „Bez grupy”.
+    /// W bazie: klucz obcy do note_groups – usunięcie grupy ustawia tu null.
+    /// </summary>
+    public Guid? GroupId { get; private set; }
+
     public string Title { get; private set; } = string.Empty;
 
     public string Content { get; private set; } = string.Empty;
@@ -32,7 +38,7 @@ public class Note
     {
     }
 
-    public static Note Create(Guid authorId, string title, string content, DateTime utcNow)
+    public static Note Create(Guid authorId, string title, string content, DateTime utcNow, Guid? groupId = null)
     {
         EnsureUtc(utcNow);
         EnsureValid(title, content);
@@ -41,6 +47,7 @@ public class Note
         {
             Id = Guid.NewGuid(),
             AuthorId = authorId,
+            GroupId = groupId,
             Title = title,
             Content = content,
             CreatedAt = utcNow,
@@ -58,6 +65,15 @@ public class Note
         Content = content;
         UpdatedAt = utcNow;
         Version++;
+    }
+
+    /// <summary>
+    /// Przenosi notatkę do grupy (null = „Bez grupy”). Celowo nie zmienia wersji ani daty modyfikacji:
+    /// przynależność do grupy to nie treść, a podbicie wersji wywołałoby konflikt autozapisu w otwartym edytorze.
+    /// </summary>
+    public void MoveToGroup(Guid? groupId)
+    {
+        GroupId = groupId;
     }
 
     private static void EnsureUtc(DateTime value)

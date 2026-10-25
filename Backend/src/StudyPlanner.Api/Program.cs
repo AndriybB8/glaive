@@ -3,9 +3,11 @@ using System.Text.Json.Serialization;
 using Microsoft.EntityFrameworkCore;
 using StudyPlanner.Api.Services;
 using StudyPlanner.Application.Common;
+using StudyPlanner.Application.NoteGroups;
 using StudyPlanner.Application.Notes;
 using StudyPlanner.Application.Schedules;
 using StudyPlanner.Application.Tasks;
+using StudyPlanner.Infrastructure.NoteGroups;
 using StudyPlanner.Infrastructure.Notes;
 using StudyPlanner.Infrastructure.Persistence;
 using StudyPlanner.Infrastructure.Schedules;
@@ -39,8 +41,9 @@ builder.Services.AddSingleton(TimeProvider.System);
 // TODO: po wdrożeniu logowania (JWT) podmienić na implementację czytającą użytkownika z tokenu.
 builder.Services.AddScoped<ICurrentUser, DevCurrentUser>();
 builder.Services.AddScoped<NoteService>();
-// TODO: po podłączeniu bazy podmienić na repozytorium EF Core (AddScoped).
-builder.Services.AddSingleton<INoteRepository, InMemoryNoteRepository>();
+builder.Services.AddScoped<INoteRepository, EfNoteRepository>();
+builder.Services.AddScoped<NoteGroupService>();
+builder.Services.AddScoped<INoteGroupRepository, EfNoteGroupRepository>();
 builder.Services.AddScoped<ScheduleService>();
 builder.Services.AddScoped<IScheduleRepository, EfScheduleRepository>();
 builder.Services.AddScoped<TaskService>();

@@ -4,7 +4,8 @@ namespace StudyPlanner.Application.Notes;
 
 public interface INoteRepository
 {
-    Task<IReadOnlyList<Note>> GetByAuthorAsync(Guid authorId, CancellationToken cancellationToken);
+    /// <summary>Notatki autora bez treści – lista nie potrzebuje HTML-a, który bywa długi.</summary>
+    Task<IReadOnlyList<NoteSummaryDto>> GetSummariesByAuthorAsync(Guid authorId, CancellationToken cancellationToken);
 
     /// <summary>Zwraca notatkę tylko wtedy, gdy należy do podanego autora.</summary>
     Task<Note?> GetByIdAsync(Guid id, Guid authorId, CancellationToken cancellationToken);
@@ -16,6 +17,12 @@ public interface INoteRepository
     /// gdy w międzyczasie ktoś zapisał nowszą wersję.
     /// </summary>
     Task UpdateAsync(Note note, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Ustawia grupę notatki (null = „Bez grupy”) bez sprawdzania i zmiany wersji, żeby nie kolidować
+    /// z autozapisem treści. Zwraca false, gdy notatka nie istnieje albo należy do kogoś innego.
+    /// </summary>
+    Task<bool> MoveToGroupAsync(Guid id, Guid authorId, Guid? groupId, CancellationToken cancellationToken);
 
     Task DeleteAsync(Note note, CancellationToken cancellationToken);
 }

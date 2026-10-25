@@ -22,6 +22,95 @@ namespace StudyPlanner.Infrastructure.Persistence.Migrations
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
+            modelBuilder.Entity("StudyPlanner.Domain.NoteGroups.NoteGroup", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("name");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("user_id");
+
+                    b.Property<int>("Version")
+                        .IsConcurrencyToken()
+                        .HasColumnType("integer")
+                        .HasColumnName("version");
+
+                    b.HasKey("Id")
+                        .HasName("pk_note_groups");
+
+                    b.HasIndex("UserId", "Name")
+                        .IsUnique()
+                        .HasDatabaseName("ux_note_groups_user_id_name");
+
+                    b.ToTable("note_groups", (string)null);
+                });
+
+            modelBuilder.Entity("StudyPlanner.Domain.Notes.Note", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<Guid>("AuthorId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("author_id");
+
+                    b.Property<string>("Content")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("content");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid?>("GroupId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("group_id");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("title");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<int>("Version")
+                        .IsConcurrencyToken()
+                        .HasColumnType("integer")
+                        .HasColumnName("version");
+
+                    b.HasKey("Id")
+                        .HasName("pk_notes");
+
+                    b.HasIndex("AuthorId")
+                        .HasDatabaseName("ix_notes_author_id");
+
+                    b.HasIndex("GroupId")
+                        .HasDatabaseName("ix_notes_group_id");
+
+                    b.ToTable("notes", (string)null);
+                });
+
             modelBuilder.Entity("StudyPlanner.Domain.Schedules.Schedule", b =>
                 {
                     b.Property<Guid>("Id")
@@ -140,6 +229,15 @@ namespace StudyPlanner.Infrastructure.Persistence.Migrations
 
                             t.HasCheckConstraint("ck_tasks_status", "status IN ('ToDo', 'InProgress', 'Done')");
                         });
+                });
+
+            modelBuilder.Entity("StudyPlanner.Domain.Notes.Note", b =>
+                {
+                    b.HasOne("StudyPlanner.Domain.NoteGroups.NoteGroup", null)
+                        .WithMany()
+                        .HasForeignKey("GroupId")
+                        .OnDelete(DeleteBehavior.SetNull)
+                        .HasConstraintName("fk_notes_note_groups_group_id");
                 });
 
             modelBuilder.Entity("StudyPlanner.Domain.Tasks.TaskItem", b =>
