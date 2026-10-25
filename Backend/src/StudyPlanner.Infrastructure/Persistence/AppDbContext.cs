@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using StudyPlanner.Domain.Schedules;
+using StudyPlanner.Domain.Tasks;
 
 namespace StudyPlanner.Infrastructure.Persistence;
 
@@ -10,6 +11,8 @@ namespace StudyPlanner.Infrastructure.Persistence;
 public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(options)
 {
     public DbSet<Schedule> Schedules => Set<Schedule>();
+
+    public DbSet<TaskItem> Tasks => Set<TaskItem>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
