@@ -1,5 +1,3 @@
-using System.Text.RegularExpressions;
-
 namespace StudyPlanner.Domain.Users;
 
 public enum AccountStatus
