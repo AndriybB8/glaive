@@ -1,11 +1,46 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { createNote, deleteNote, getNote, getNotes } from './api'
+import { createNote, deleteNote, getNote, getNotes, moveNoteToGroup } from './api'
+import { DeleteNoteGroupDialog } from './DeleteNoteGroupDialog'
 import { formatUpdatedAt } from './formatDate'
+import { getNoteGroups } from './groupsApi'
 import { NoteEditorPanel } from './NoteEditorPanel'
-import type { Note, NoteSummary } from './types'
+import { NoteGroupFormDialog } from './NoteGroupFormDialog'
+import { NoteGroupsNav } from './NoteGroupsNav'
+import type { Note, NoteGroup, NoteGroupFilter, NoteSummary } from './types'
+
+const GROUPS_LOAD_ERROR = 'Nie udało się wczytać grup.'
+
+type OpenGroupDialog = { kind: 'create' } | { kind: 'rename'; group: NoteGroup } | { kind: 'delete'; group: NoteGroup } | null
 
 function sortByUpdated(notes: NoteSummary[]): NoteSummary[] {
   return [...notes].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
+}
+
+/** Grupy w tej samej kolejności co z backendu (alfabetycznie, bez wielkości liter). */
+function sortByName(groups: NoteGroup[]): NoteGroup[] {
+  return [...groups].sort((a, b) => a.name.localeCompare(b.name, 'pl', { sensitivity: 'base' }))
+}
+
+function matchesFilter(note: NoteSummary, filter: NoteGroupFilter): boolean {
+  switch (filter.kind) {
+    case 'all':
+      return true
+    case 'ungrouped':
+      return note.groupId === null
+    case 'group':
+      return note.groupId === filter.groupId
+  }
+}
+
+function emptyListText(filter: NoteGroupFilter): string {
+  switch (filter.kind) {
+    case 'all':
+      return 'Nie masz jeszcze notatek. Utwórz pierwszą przyciskiem powyżej.'
+    case 'ungrouped':
+      return 'Wszystkie notatki są przypisane do grup.'
+    case 'group':
+      return 'Ta grupa jest pusta. Utwórz w niej notatkę albo przenieś tu istniejącą (pole „Grupa” w notatce).'
+  }
 }
 
 export function NotesPage() {
@@ -18,12 +53,31 @@ export function NotesPage() {
   const [loadingId, setLoadingId] = useState<string | null>(null)
   const latestRequestRef = useRef<string | null>(null)
 
+  const [groups, setGroups] = useState<NoteGroup[] | null>(null)
+  const [groupsError, setGroupsError] = useState<string | null>(null)
+  const [filter, setFilter] = useState<NoteGroupFilter>({ kind: 'all' })
+  const [groupDialog, setGroupDialog] = useState<OpenGroupDialog>(null)
+
+  const visibleNotes = notes?.filter((n) => matchesFilter(n, filter)) ?? null
+
   const loadNotes = useCallback(async () => {
     try {
       setListError(null)
       setNotes(sortByUpdated(await getNotes()))
     } catch {
       setListError('Nie udało się wczytać notatek. Sprawdź, czy backend jest uruchomiony.')
+    }
+  }, [])
+
+  const loadGroups = useCallback(async () => {
+    try {
+      setGroupsError(null)
+      const result = await getNoteGroups()
+      setGroups(result)
+      // Wybrana grupa mogła zniknąć (usunięta w innej karcie) – wracamy do wszystkich notatek.
+      setFilter((current) => (current.kind === 'group' && !result.some((g) => g.id === current.groupId) ? { kind: 'all' } : current))
+    } catch {
+      setGroupsError(GROUPS_LOAD_ERROR)
     }
   }, [])
 
@@ -35,6 +89,13 @@ export function NotesPage() {
       })
       .catch(() => {
         if (!ignore) setListError('Nie udało się wczytać notatek. Sprawdź, czy backend jest uruchomiony.')
+      })
+    getNoteGroups()
+      .then((result) => {
+        if (!ignore) setGroups(result)
+      })
+      .catch(() => {
+        if (!ignore) setGroupsError(GROUPS_LOAD_ERROR)
       })
     return () => {
       ignore = true
@@ -60,14 +121,18 @@ export function NotesPage() {
 
   const handleCreate = async () => {
     setActionError(null)
+    // Nowa notatka trafia do grupy, którą użytkownik właśnie przegląda.
+    const groupId = filter.kind === 'group' ? filter.groupId : null
     try {
-      const note = await createNote()
+      const note = await createNote({}, groupId)
       latestRequestRef.current = note.id
-      setNotes((current) => [{ id: note.id, title: note.title, updatedAt: note.updatedAt }, ...(current ?? [])])
+      setNotes((current) => [{ id: note.id, title: note.title, updatedAt: note.updatedAt, groupId: note.groupId }, ...(current ?? [])])
       setSelected(note)
       setEditorKey((key) => key + 1)
     } catch {
       setActionError('Nie udało się utworzyć notatki.')
+      // Najczęstszy powód przy wybranej grupie: usunięto ją w innej karcie.
+      if (groupId) void loadGroups()
     }
   }
 
@@ -86,11 +151,11 @@ export function NotesPage() {
   }
 
   const handleSaved = useCallback((saved: Note) => {
+    // groupId zostaje z listy: grupę zmienia tylko handleMove, a odpowiedź autozapisu
+    // wysłanego tuż przed przeniesieniem mogłaby jeszcze nieść starą grupę.
     setNotes((current) =>
       current
-        ? sortByUpdated(
-            current.map((n) => (n.id === saved.id ? { id: saved.id, title: saved.title, updatedAt: saved.updatedAt } : n)),
-          )
+        ? sortByUpdated(current.map((n) => (n.id === saved.id ? { ...n, title: saved.title, updatedAt: saved.updatedAt } : n)))
         : current,
     )
   }, [])
@@ -98,7 +163,55 @@ export function NotesPage() {
   const handleReplace = (note: Note) => {
     setSelected(note)
     setEditorKey((key) => key + 1)
-    handleSaved(note)
+    setNotes((current) =>
+      current
+        ? sortByUpdated(current.map((n) => (n.id === note.id ? { id: note.id, title: note.title, updatedAt: note.updatedAt, groupId: note.groupId } : n)))
+        : current,
+    )
+  }
+
+  /** Przeniesienie otwartej notatki. Błąd przekazujemy dalej – pokazuje go pole „Grupa” w edytorze. */
+  const handleMove = async (groupId: string | null) => {
+    if (!selected) return
+    const id = selected.id
+    try {
+      await moveNoteToGroup(id, groupId)
+    } catch (error) {
+      // Wybrana grupa mogła zostać usunięta w innej karcie – odświeżamy listę grup.
+      void loadGroups()
+      throw error
+    }
+    setSelected((current) => (current?.id === id ? { ...current, groupId } : current))
+    setNotes((current) => current?.map((n) => (n.id === id ? { ...n, groupId } : n)) ?? current)
+  }
+
+  const handleGroupSaved = (saved: NoteGroup) => {
+    const isNew = !groups?.some((g) => g.id === saved.id)
+    setGroups((current) => sortByName([...(current ?? []).filter((g) => g.id !== saved.id), saved]))
+    // Po utworzeniu od razu pokazujemy nową (pustą) grupę – można w niej dodać notatkę.
+    if (isNew) setFilter({ kind: 'group', groupId: saved.id })
+    setGroupDialog(null)
+  }
+
+  const handleGroupChangedElsewhere = (current: NoteGroup | { deletedId: string }) => {
+    if ('deletedId' in current) {
+      removeGroupLocally(current.deletedId)
+    } else {
+      setGroups((list) => (list ? sortByName(list.map((g) => (g.id === current.id ? current : g))) : list))
+    }
+  }
+
+  const handleGroupDeleted = (id: string) => {
+    removeGroupLocally(id)
+    setGroupDialog(null)
+  }
+
+  /** Grupa zniknęła: jej notatki są teraz „Bez grupy” (tak samo zrobiła baza). */
+  const removeGroupLocally = (id: string) => {
+    setGroups((current) => current?.filter((g) => g.id !== id) ?? current)
+    setNotes((current) => current?.map((n) => (n.groupId === id ? { ...n, groupId: null } : n)) ?? current)
+    setSelected((current) => (current?.groupId === id ? { ...current, groupId: null } : current))
+    setFilter((current) => (current.kind === 'group' && current.groupId === id ? { kind: 'all' } : current))
   }
 
   return (
@@ -125,7 +238,19 @@ export function NotesPage() {
           </p>
         )}
 
-        <nav aria-label="Lista notatek" className="min-h-0 flex-1 overflow-y-auto px-2 pb-4">
+        <NoteGroupsNav
+          groups={groups}
+          error={groupsError}
+          notes={notes}
+          filter={filter}
+          onFilterChange={setFilter}
+          onCreate={() => setGroupDialog({ kind: 'create' })}
+          onRename={(group) => setGroupDialog({ kind: 'rename', group })}
+          onDelete={(group) => setGroupDialog({ kind: 'delete', group })}
+          onRetry={() => void loadGroups()}
+        />
+
+        <nav aria-label="Lista notatek" className="min-h-0 flex-1 overflow-y-auto px-2 pt-2 pb-4">
           {listError ? (
             <div className="px-2 py-4 text-sm text-slate-600">
               <p>{listError}</p>
@@ -133,13 +258,13 @@ export function NotesPage() {
                 Spróbuj ponownie
               </button>
             </div>
-          ) : notes === null ? (
+          ) : visibleNotes === null ? (
             <p className="px-2 py-4 text-sm text-slate-500">Wczytywanie…</p>
-          ) : notes.length === 0 ? (
-            <p className="px-2 py-4 text-sm text-slate-600">Nie masz jeszcze notatek. Utwórz pierwszą przyciskiem powyżej.</p>
+          ) : visibleNotes.length === 0 ? (
+            <p className="px-2 py-4 text-sm text-slate-600">{emptyListText(filter)}</p>
           ) : (
             <ul className="space-y-0.5">
-              {notes.map((n) => {
+              {visibleNotes.map((n) => {
                 const isActive = n.id === selected?.id
                 return (
                   <li key={n.id}>
@@ -175,6 +300,8 @@ export function NotesPage() {
             onDelete={handleDelete}
             onReplace={handleReplace}
             onBack={() => setSelected(null)}
+            groups={groups}
+            onMove={handleMove}
           />
         ) : (
           <div className="m-auto max-w-xs px-6 text-center text-sm text-slate-500">
@@ -182,6 +309,24 @@ export function NotesPage() {
           </div>
         )}
       </main>
+
+      {(groupDialog?.kind === 'create' || groupDialog?.kind === 'rename') && (
+        <NoteGroupFormDialog
+          group={groupDialog.kind === 'rename' ? groupDialog.group : undefined}
+          existingGroups={groups ?? []}
+          onClose={() => setGroupDialog(null)}
+          onSaved={handleGroupSaved}
+          onChangedElsewhere={handleGroupChangedElsewhere}
+        />
+      )}
+      {groupDialog?.kind === 'delete' && (
+        <DeleteNoteGroupDialog
+          group={groupDialog.group}
+          noteCount={notes?.filter((n) => n.groupId === groupDialog.group.id).length ?? 0}
+          onClose={() => setGroupDialog(null)}
+          onDeleted={handleGroupDeleted}
+        />
+      )}
     </div>
   )
 }

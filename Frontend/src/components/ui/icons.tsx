@@ -35,3 +35,40 @@ export function CloseIcon() {
     </Icon>
   )
 }
+
+export function PlusIcon() {
+  return (
+    <Icon>
+      <path d="M10 4.5v11M4.5 10h11" />
+    </Icon>
+  )
+}
+
+/** Grupa notatek (folder). */
+export function FolderIcon() {
+  return (
+    <Icon>
+      <path d="M3 6a1.5 1.5 0 0 1 1.5-1.5h3.2l1.6 1.8h6.2A1.5 1.5 0 0 1 17 7.8v6.7a1.5 1.5 0 0 1-1.5 1.5h-11A1.5 1.5 0 0 1 3 14.5z" />
+    </Icon>
+  )
+}
+
+/** Wszystkie notatki. */
+export function NotesIcon() {
+  return (
+    <Icon>
+      <rect x="4.5" y="3" width="11" height="14" rx="1.5" />
+      <path d="M7.5 7h5M7.5 10h5M7.5 13h3" />
+    </Icon>
+  )
+}
+
+/** Notatki bez grupy. */
+export function TrayIcon() {
+  return (
+    <Icon>
+      <path d="M3 11.5l2-6.5a1.5 1.5 0 0 1 1.4-1h7.2a1.5 1.5 0 0 1 1.4 1l2 6.5" />
+      <path d="M3 11.5V15a1.5 1.5 0 0 0 1.5 1.5h11A1.5 1.5 0 0 0 17 15v-3.5h-4l-1 1.5H8l-1-1.5z" />
+    </Icon>
+  )
+}

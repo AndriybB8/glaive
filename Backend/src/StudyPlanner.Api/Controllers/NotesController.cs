@@ -40,6 +40,17 @@ public sealed class NotesController(NoteService noteService) : ControllerBase
         return result.IsSuccess ? Ok(result.Value) : ToErrorResponse(result.Error!);
     }
 
+    /// <summary>
+    /// Przeniesienie notatki do grupy (<c>{ "groupId": null }</c> = „Bez grupy”).
+    /// Nie zmienia wersji notatki, więc nie przerywa autozapisu w otwartym edytorze.
+    /// </summary>
+    [HttpPut("{id:guid}/group")]
+    public async Task<IActionResult> MoveToGroup(Guid id, MoveNoteRequest request, CancellationToken cancellationToken)
+    {
+        var result = await noteService.MoveToGroupAsync(id, request, cancellationToken);
+        return result.IsSuccess ? NoContent() : ToErrorResponse(result.Error!);
+    }
+
     [HttpDelete("{id:guid}")]
     public async Task<IActionResult> Delete(Guid id, CancellationToken cancellationToken)
     {

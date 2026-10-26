@@ -1,9 +1,10 @@
 import type { Editor } from '@tiptap/react'
-import { useCallback, useRef, useState } from 'react'
+import { useCallback, useId, useRef, useState } from 'react'
+import { ApiError } from './api'
 import { NoteEditor } from './NoteEditor'
 import { formatUpdatedAt } from './formatDate'
 import { useNoteAutosave, type SaveStatus } from './useNoteAutosave'
-import type { Note } from './types'
+import type { Note, NoteGroup } from './types'
 
 interface NoteEditorPanelProps {
   note: Note
@@ -12,6 +13,10 @@ interface NoteEditorPanelProps {
   /** Odrzuca lokalne zmiany i pokazuje podaną wersję notatki. */
   onReplace: (note: Note) => void
   onBack: () => void
+  /** Grupy do wyboru; null = jeszcze się wczytują (albo nie udało się ich pobrać). */
+  groups: NoteGroup[] | null
+  /** Przenosi notatkę do grupy (null = „Bez grupy”). Odrzuca obietnicę, gdy się nie uda. */
+  onMove: (groupId: string | null) => Promise<void>
 }
 
 function statusText(status: SaveStatus, lastSavedAt: string): string {
@@ -29,7 +34,7 @@ function statusText(status: SaveStatus, lastSavedAt: string): string {
   }
 }
 
-export function NoteEditorPanel({ note, onSaved, onDelete, onReplace, onBack }: NoteEditorPanelProps) {
+export function NoteEditorPanel({ note, onSaved, onDelete, onReplace, onBack, groups, onMove }: NoteEditorPanelProps) {
   const [title, setTitle] = useState(note.title)
   const editorRef = useRef<Editor | null>(null)
   const { status, lastSavedAt, conflict, markChanged, saveNow, keepMine } = useNoteAutosave(note, onSaved)
@@ -110,6 +115,8 @@ export function NoteEditorPanel({ note, onSaved, onDelete, onReplace, onBack }: 
         className="w-full bg-transparent pb-3 text-3xl font-bold tracking-tight text-slate-900 outline-none placeholder:text-slate-300"
       />
 
+      <NoteGroupPicker groupId={note.groupId} groups={groups} onMove={onMove} />
+
       <NoteEditor
         initialContent={note.content}
         onChange={handleContentChange}
@@ -117,5 +124,66 @@ export function NoteEditorPanel({ note, onSaved, onDelete, onReplace, onBack }: 
         onReady={handleEditorReady}
       />
     </article>
+  )
+}
+
+interface NoteGroupPickerProps {
+  groupId: string | null
+  groups: NoteGroup[] | null
+  onMove: (groupId: string | null) => Promise<void>
+}
+
+/** Wybór grupy notatki. Zmiana od razu przenosi notatkę – nie czeka na autozapis i go nie przerywa. */
+function NoteGroupPicker({ groupId, groups, onMove }: NoteGroupPickerProps) {
+  const selectId = useId()
+  const [moving, setMoving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  // Grupa mogła zostać usunięta w innej karcie – wtedy pokazujemy „Bez grupy”.
+  const value = groupId && groups?.some((g) => g.id === groupId) ? groupId : ''
+
+  const handleChange = async (newValue: string) => {
+    setMoving(true)
+    setError(null)
+    try {
+      await onMove(newValue || null)
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 400) {
+        setError(err.message)
+      } else if (err instanceof ApiError && err.status === 404) {
+        setError('Ta notatka została w międzyczasie usunięta.')
+      } else {
+        setError('Nie udało się przenieść notatki.')
+      }
+    } finally {
+      setMoving(false)
+    }
+  }
+
+  return (
+    <div className="mb-4 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm">
+      <label htmlFor={selectId} className="text-slate-500">
+        Grupa
+      </label>
+      <select
+        id={selectId}
+        value={value}
+        onChange={(event) => void handleChange(event.target.value)}
+        disabled={moving || groups === null}
+        className="h-11 max-w-full min-w-0 truncate rounded-md border border-slate-200 bg-white px-2 text-slate-700 hover:border-slate-300 focus:border-blue-600 focus:outline-2 focus:-outline-offset-1 focus:outline-blue-600 disabled:opacity-60 sm:h-8 sm:max-w-64"
+      >
+        <option value="">Bez grupy</option>
+        {groups?.map((group) => (
+          <option key={group.id} value={group.id}>
+            {group.name}
+          </option>
+        ))}
+      </select>
+      {moving && <span className="text-slate-500">Przenoszenie…</span>}
+      {error && (
+        <span role="alert" className="text-red-700">
+          {error}
+        </span>
+      )}
+    </div>
   )
 }
