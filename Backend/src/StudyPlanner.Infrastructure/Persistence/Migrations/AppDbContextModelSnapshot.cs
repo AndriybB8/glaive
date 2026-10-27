@@ -61,6 +61,29 @@ namespace StudyPlanner.Infrastructure.Persistence.Migrations
                     b.ToTable("note_groups", (string)null);
                 });
 
+            modelBuilder.Entity("StudyPlanner.Domain.NoteTasks.NoteTaskLink", b =>
+                {
+                    b.Property<Guid>("NoteId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("note_id");
+
+                    b.Property<Guid>("TaskId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("task_id");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.HasKey("NoteId", "TaskId")
+                        .HasName("pk_note_tasks");
+
+                    b.HasIndex("TaskId")
+                        .HasDatabaseName("ix_note_tasks_task_id");
+
+                    b.ToTable("note_tasks", (string)null);
+                });
+
             modelBuilder.Entity("StudyPlanner.Domain.Notes.Note", b =>
                 {
                     b.Property<Guid>("Id")
@@ -269,6 +292,23 @@ namespace StudyPlanner.Infrastructure.Persistence.Migrations
                         {
                             t.HasCheckConstraint("ck_users_status", "status IN ('Active', 'Inactive')");
                         });
+                });
+
+            modelBuilder.Entity("StudyPlanner.Domain.NoteTasks.NoteTaskLink", b =>
+                {
+                    b.HasOne("StudyPlanner.Domain.Notes.Note", null)
+                        .WithMany()
+                        .HasForeignKey("NoteId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_note_tasks_notes_note_id");
+
+                    b.HasOne("StudyPlanner.Domain.Tasks.TaskItem", null)
+                        .WithMany()
+                        .HasForeignKey("TaskId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_note_tasks_tasks_task_id");
                 });
 
             modelBuilder.Entity("StudyPlanner.Domain.Notes.Note", b =>
