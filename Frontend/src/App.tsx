@@ -2,10 +2,13 @@ import { useEffect, useState } from 'react'
 import { NavTabs } from './components/ui/NavTabs'
 import { NotesPage } from './features/notes/NotesPage'
 import { SchedulesPage } from './features/schedules/SchedulesPage'
+import {RegisterPage} from "./features/auth/RegisterPage.tsx";
+
 
 const pages = [
   { id: 'notatki', label: 'Notatki' },
   { id: 'harmonogramy', label: 'Harmonogramy' },
+  { id: 'rejestracja', label: 'Rejestracja' },
 ] as const
 
 type PageId = (typeof pages)[number]['id']
@@ -29,7 +32,7 @@ function App() {
   return (
     <div className="flex h-dvh flex-col bg-white text-slate-900">
       <NavTabs brand="StudyPlanner" tabs={pages} current={page} />
-      <div className="min-h-0 flex-1">{page === 'harmonogramy' ? <SchedulesPage /> : <NotesPage />}</div>
+      <div className="min-h-0 flex-1">{page === 'harmonogramy' ? <SchedulesPage /> : page === 'rejestracja' ? <RegisterPage /> : <NotesPage />}</div>
     </div>
   )
 }
