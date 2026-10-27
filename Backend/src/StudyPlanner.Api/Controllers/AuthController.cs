@@ -11,10 +11,10 @@ public class AuthController(UserService userService) : ControllerBase
     public async Task<ActionResult<UserDto>> Register(RegisterRequest req, CancellationToken cancellationToken)
     {
         var res = await userService.RegisterAsync(req, cancellationToken);
-        return res.IsSuccess ? Ok(res.Value) : BadRequest(res.Error);
+        return res.IsSuccess ? Ok(res.Value) : ToErrorResponse(res.Error);
     }
 
-    private static ObjectResult ToErrorReponse(UserError error)
+    private static ObjectResult ToErrorResponse(UserError error)
     {
         var problem = new ProblemDetails { Status = StatusCodes.Status400BadRequest, Detail = error.Message };
         return new ObjectResult(problem) { StatusCode = StatusCodes.Status400BadRequest };
