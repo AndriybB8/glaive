@@ -4,7 +4,6 @@ using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
-using StudyPlanner.Api.Services;
 using StudyPlanner.Application.Common;
 using StudyPlanner.Application.NoteGroups;
 using StudyPlanner.Application.Notes;
@@ -47,8 +46,7 @@ var jwtKey = builder.Configuration["Jwt:Key"] ?? throw new InvalidOperationExcep
 builder.Services.AddDbContext<AppDbContext>(options => options.UseNpgsql(connectionString));
 
 builder.Services.AddSingleton(TimeProvider.System);
-// TODO: po wdrożeniu logowania (JWT) podmienić na implementację czytającą użytkownika z tokenu.
-builder.Services.AddScoped<ICurrentUser, DevCurrentUser>();
+builder.Services.AddScoped<ICurrentUser, HttpContextCurrentUser>();
 builder.Services.AddScoped<NoteService>();
 builder.Services.AddScoped<INoteRepository, EfNoteRepository>();
 builder.Services.AddScoped<NoteGroupService>();
@@ -65,7 +63,7 @@ builder.Services.AddScoped<ITokenGenerator, JwtTokenGenerator>();
 builder.Services.AddScoped<UserService>();
 builder.Services.AddScoped<IUserRepository, EfUserRepository>();
 
-
+builder.Services.AddHttpContextAccessor();
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
     {

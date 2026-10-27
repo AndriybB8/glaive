@@ -12,14 +12,14 @@ public class AuthController(UserService userService) : ControllerBase
     public async Task<ActionResult<UserDto>> Register(RegisterRequest req, CancellationToken cancellationToken)
     {
         var res = await userService.RegisterAsync(req, cancellationToken);
-        return res.IsSuccess ? Ok(res.Value) : ToErrorResponse(res.Error);
+        return res.IsSuccess ? Ok(res.Value) : ToErrorResponse(res.Error!);
     }
 
     [HttpPost("login")]
     public async Task<ActionResult<LoginResponseDto>> Login(LoginRequest req, CancellationToken cancellationToken)
     {
         var res = await userService.LoginAsync(req, cancellationToken);
-        return res.IsSuccess ? Ok(res.Value) : ToErrorResponse(res.Error);
+        return res.IsSuccess ? Ok(res.Value) : ToErrorResponse(res.Error!);
     }
 
     private static ObjectResult ToErrorResponse(UserError error)
