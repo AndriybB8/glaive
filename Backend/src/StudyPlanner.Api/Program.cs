@@ -8,12 +8,14 @@ using StudyPlanner.Application.Notes;
 using StudyPlanner.Application.NoteTasks;
 using StudyPlanner.Application.Schedules;
 using StudyPlanner.Application.Tasks;
+using StudyPlanner.Application.Users;
 using StudyPlanner.Infrastructure.NoteGroups;
 using StudyPlanner.Infrastructure.Notes;
 using StudyPlanner.Infrastructure.NoteTasks;
 using StudyPlanner.Infrastructure.Persistence;
 using StudyPlanner.Infrastructure.Schedules;
 using StudyPlanner.Infrastructure.Tasks;
+using StudyPlanner.Infrastructure.Users;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -52,6 +54,10 @@ builder.Services.AddScoped<ScheduleService>();
 builder.Services.AddScoped<IScheduleRepository, EfScheduleRepository>();
 builder.Services.AddScoped<TaskService>();
 builder.Services.AddScoped<ITaskRepository, EfTaskRepository>();
+
+builder.Services.AddSingleton<IPasswordHasher, PasswordHasher>();
+builder.Services.AddScoped<UserService>();
+builder.Services.AddScoped<IUserRepository, EfUserRepository>();
 
 var app = builder.Build();
 

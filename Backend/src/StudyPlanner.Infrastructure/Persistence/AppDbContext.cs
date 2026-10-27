@@ -4,6 +4,7 @@ using StudyPlanner.Domain.Notes;
 using StudyPlanner.Domain.NoteTasks;
 using StudyPlanner.Domain.Schedules;
 using StudyPlanner.Domain.Tasks;
+using StudyPlanner.Domain.Users;
 
 namespace StudyPlanner.Infrastructure.Persistence;
 
@@ -23,6 +24,8 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
     public DbSet<Schedule> Schedules => Set<Schedule>();
 
     public DbSet<TaskItem> Tasks => Set<TaskItem>();
+
+    public DbSet<User> Users => Set<User>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
