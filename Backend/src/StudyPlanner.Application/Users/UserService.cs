@@ -48,7 +48,7 @@ public class UserService(IUserRepository repo, IPasswordHasher hasher, TimeProvi
         }
         catch (UserEmailTakenException)
         {
-            return UserResult<UserDto>.Failure(new UserError(UserErrorType.Validation, "This email is already registered."));
+            return UserResult<UserDto>.Failure(new UserError(UserErrorType.Validation, "Ten adres email jest już zajęty."));
         }
 
         return UserResult<UserDto>.Success(UserDto.From(user));
