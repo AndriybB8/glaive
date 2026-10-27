@@ -8,12 +8,13 @@ public class UserServiceTests
 {
     private readonly FakeUserRepository _repo = new();
     private readonly FakePasswordHasher _hasher = new();
+    private readonly FakeTokenGenerator _tokenGen = new();
     private readonly FixedTimeProvider _time = new(new DateTimeOffset(2026, 1, 1, 12, 0, 0, TimeSpan.Zero));
     private readonly UserService _service;
 
     public UserServiceTests()
     {
-        _service = new UserService(_repo, _hasher, _time);
+        _service = new UserService(_repo, _hasher, _tokenGen, _time);
     }
 
     [Fact]
@@ -97,6 +98,12 @@ public class UserServiceTests
         public override DateTimeOffset GetUtcNow() => _now;
     }
 
+    private sealed class FakeTokenGenerator : ITokenGenerator
+    {
+        public GeneratedToken GenerateToken(Guid userId, string email) =>
+            new($"token-for-{userId}", DateTime.UtcNow.AddHours(1));
+    }
+
     private sealed class FakePasswordHasher : IPasswordHasher
     {
         public string Hash(string password) => $"hashed:{password}";
@@ -112,6 +119,9 @@ public class UserServiceTests
         public Task<bool> ExistsByEmailAsync(string email, CancellationToken cancellationToken) =>
             Task.FromResult(Users.Any(u => u.Email == email));
 
+        public Task<User?> GetByEmailAsync(string email, CancellationToken cancellationToken) =>
+            Task.FromResult(Users.FirstOrDefault(u => u.Email == email));
+
         public Task AddAsync(User user, CancellationToken cancellationToken)
         {
             if (ThrowEmailTakenOnNextAdd)
@@ -125,4 +135,3 @@ public class UserServiceTests
         }
     }
 }
-

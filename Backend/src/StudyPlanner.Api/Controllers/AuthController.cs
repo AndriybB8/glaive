@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using StudyPlanner.Application.Users;
 
 namespace StudyPlanner.Api.Controllers;
@@ -17,6 +18,7 @@ public class AuthController(UserService userService) : ControllerBase
     }
 
     [HttpPost("login")]
+    [EnableRateLimiting("login")]
     public async Task<ActionResult<LoginResponseDto>> Login(LoginRequest req, CancellationToken cancellationToken)
     {
         var res = await userService.LoginAsync(req, cancellationToken);

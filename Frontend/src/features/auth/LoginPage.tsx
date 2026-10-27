@@ -27,7 +27,7 @@ export function LoginPage({ onLoggedIn, onSwitchToRegister }: LoginPageProps) {
       onLoggedIn()
     } catch (error) {
       setSaveError(
-        error instanceof ApiError && error.status === 400 ? error.message : 'Nie udało się zalogować. Spróbuj ponownie.',
+        error instanceof ApiError && error.status === 400 ? error.message : 'Nie udało się zalogować. Spróbuj ponownie później.',
       )
     } finally {
       setSaving(false)
