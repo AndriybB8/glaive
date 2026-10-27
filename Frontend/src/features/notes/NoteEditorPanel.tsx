@@ -1,6 +1,6 @@
 import type { Editor } from '@tiptap/react'
 import { useCallback, useId, useRef, useState } from 'react'
-import { ApiError } from './api'
+import { ApiError } from '../../lib/http'
 import { NoteTasksSection } from '../noteTasks/NoteTasksSection'
 import { NoteEditor } from './NoteEditor'
 import { formatUpdatedAt } from './formatDate'
