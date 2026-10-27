@@ -1,6 +1,7 @@
 import type { Editor } from '@tiptap/react'
 import { useCallback, useId, useRef, useState } from 'react'
 import { ApiError } from './api'
+import { NoteTasksSection } from '../noteTasks/NoteTasksSection'
 import { NoteEditor } from './NoteEditor'
 import { formatUpdatedAt } from './formatDate'
 import { useNoteAutosave, type SaveStatus } from './useNoteAutosave'
@@ -116,6 +117,7 @@ export function NoteEditorPanel({ note, onSaved, onDelete, onReplace, onBack, gr
       />
 
       <NoteGroupPicker groupId={note.groupId} groups={groups} onMove={onMove} />
+      <NoteTasksSection noteId={note.id} />
 
       <NoteEditor
         initialContent={note.content}

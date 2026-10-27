@@ -126,3 +126,22 @@
   color: #94a3b8;
   pointer-events: none;
 }
+
+/* Podgląd notatki (np. w szczegółach zadania): mniejszy tekst i bez minimalnej wysokości edytora. */
+.note-content.note-preview {
+  min-height: 0;
+  font-size: 0.9375rem;
+  line-height: 1.6;
+}
+
+.note-content.note-preview h2 {
+  font-size: 1.2rem;
+}
+
+.note-content.note-preview h3 {
+  font-size: 1.05rem;
+}
+
+.note-content.note-preview > :first-child {
+  margin-top: 0;
+}

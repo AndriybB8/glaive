@@ -6,6 +6,7 @@ import { SelectField } from '../../components/ui/SelectField'
 import { TextAreaField } from '../../components/ui/TextAreaField'
 import { TextField } from '../../components/ui/TextField'
 import { ApiError } from '../../lib/http'
+import { TaskNotesSection } from '../noteTasks/TaskNotesSection'
 import { formatDate } from '../schedules/scheduleDates'
 import type { Schedule } from '../schedules/types'
 import { createTask, isTaskConflict, updateTask } from './api'
@@ -170,6 +171,9 @@ export function TaskFormDialog({ schedule, task, onClose, onSaved, onChangedElse
           onChange={(event) => change('status', event.target.value as TaskStatus)}
         />
       </div>
+
+      {/* Szczegóły istniejącego zadania: podgląd przypisanych notatek. */}
+      {task && <TaskNotesSection taskId={task.id} />}
 
       {conflict && (
         <Alert
