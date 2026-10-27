@@ -5,7 +5,7 @@ public enum UserErrorType
     Validation = 0
 }
 
-public sealed record UserError(UserErrorType type, string Message);
+public sealed record UserError(UserErrorType Type, string Message);
 
 public class UserResult<T>
 {
