@@ -3,10 +3,9 @@ using StudyPlanner.Domain.Users;
 
 namespace StudyPlanner.Application.Users;
 
-public class UserService(IUserRepository repo, IPasswordHasher hasher, TimeProvider timeProvider)
+public class UserService(IUserRepository repo, IPasswordHasher hasher, ITokenGenerator tokenGen, TimeProvider timeProvider)
 {
     private const int MinPasswordLength = 8;
-
 
     public async Task<UserResult<UserDto>> RegisterAsync(RegisterRequest req,
         CancellationToken cancellationToken)
@@ -55,4 +54,21 @@ public class UserService(IUserRepository repo, IPasswordHasher hasher, TimeProvi
     }
 
     private DateTime UtcNow() => timeProvider.GetUtcNow().UtcDateTime;
+
+    public async Task<UserResult<LoginResponseDto>> LoginAsync(LoginRequest req, CancellationToken cancellationToken)
+    {
+        var email = req.Email?.Trim().ToLowerInvariant() ?? string.Empty; // XXX@yYy.ZZz -> xxx@yyy.zzz
+        var pwd = req.Password ?? string.Empty;
+
+        var user = await repo.GetByEmailAsync(email, cancellationToken);
+
+        if (user == null || !hasher.Verify(user.PasswordHash, pwd))
+        {
+            return UserResult<LoginResponseDto>.Failure(new UserError(UserErrorType.Validation,
+                "Nieprawidłowy email lub hasło."));
+        }
+
+        GeneratedToken gt = tokenGen.GenerateToken(user.Id, user.Email);
+        return UserResult<LoginResponseDto>.Success(new LoginResponseDto(gt.Token, gt.ExpiresAt));
+    }
 }

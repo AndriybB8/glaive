@@ -13,3 +13,7 @@ public sealed record UserDto(Guid Id, string Email, DateTime CreatedAt, AccountS
     }
 }
 
+public sealed record LoginRequest(string? Email, string? Password);
+
+public sealed record LoginResponseDto(string Token, DateTime ExpiresAt);
+

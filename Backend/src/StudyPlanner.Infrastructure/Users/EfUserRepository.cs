@@ -27,4 +27,9 @@ public class EfUserRepository(AppDbContext db) : IUserRepository
             throw new UserEmailTakenException();
         }
     }
+
+    public Task<User?> GetByEmailAsync(string email, CancellationToken cancellationToken)
+    {
+        return db.Users.FirstOrDefaultAsync(u => u.Email == email, cancellationToken);
+    }
 }
