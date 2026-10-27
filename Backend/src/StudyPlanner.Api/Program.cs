@@ -52,6 +52,8 @@ builder.Services.AddScoped<TaskService>();
 builder.Services.AddScoped<ITaskRepository, EfTaskRepository>();
 
 builder.Services.AddSingleton<IPasswordHasher, PasswordHasher>();
+builder.Services.AddScoped<UserService>();
+builder.Services.AddScoped<IUserRepository, EfUserRepository>();
 
 var app = builder.Build();
 

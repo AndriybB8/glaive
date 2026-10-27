@@ -58,7 +58,8 @@ public class User
         }
     }
 
-    private static bool IsValidEmail(string email)
+    //Don't forget this has to be made private later
+    public static bool IsValidEmail(string email)
     {
         //xxx@yyy
         var at = email.IndexOf('@');
