@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using StudyPlanner.Domain.NoteGroups;
 using StudyPlanner.Domain.Notes;
+using StudyPlanner.Domain.NoteTasks;
 using StudyPlanner.Domain.Schedules;
 using StudyPlanner.Domain.Tasks;
 
@@ -15,6 +16,9 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
     public DbSet<Note> Notes => Set<Note>();
 
     public DbSet<NoteGroup> NoteGroups => Set<NoteGroup>();
+
+    /// <summary>Powiązania notatek z zadaniami (tabela note_tasks).</summary>
+    public DbSet<NoteTaskLink> NoteTaskLinks => Set<NoteTaskLink>();
 
     public DbSet<Schedule> Schedules => Set<Schedule>();
 

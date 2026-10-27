@@ -1,9 +1,7 @@
 import { EditorContent, useEditor, type Editor } from '@tiptap/react'
-import StarterKit from '@tiptap/starter-kit'
-import { Placeholder } from '@tiptap/extensions'
-import { TaskItem, TaskList } from '@tiptap/extension-list'
 import { useEffect, useRef } from 'react'
 import { EditorToolbar } from './EditorToolbar'
+import { createNoteExtensions } from './noteExtensions'
 import './note-editor.css'
 
 interface NoteEditorProps {
@@ -28,15 +26,7 @@ export function NoteEditor({ initialContent, onChange, onSaveShortcut, onReady }
   }, [onChange, onSaveShortcut])
 
   const editor = useEditor({
-    extensions: [
-      StarterKit.configure({
-        heading: { levels: [2, 3] },
-        link: { openOnClick: false, autolink: true },
-      }),
-      TaskList,
-      TaskItem.configure({ nested: true }),
-      Placeholder.configure({ placeholder: 'Zacznij pisać notatkę…' }),
-    ],
+    extensions: createNoteExtensions('Zacznij pisać notatkę…'),
     content: initialContent,
     editorProps: {
       attributes: {
