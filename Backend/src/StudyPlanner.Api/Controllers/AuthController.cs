@@ -5,6 +5,7 @@ using StudyPlanner.Application.Users;
 namespace StudyPlanner.Api.Controllers;
 
 [ApiController]
+[AllowAnonymous]
 [Route("api/auth")]
 public class AuthController(UserService userService) : ControllerBase
 {

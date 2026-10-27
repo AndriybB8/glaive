@@ -1,3 +1,5 @@
+import {getToken} from "./authToken";
+
 export class ApiError extends Error {
   readonly status: number
 
@@ -27,9 +29,12 @@ interface ProblemDetails {
 
 /** Wywołanie API: JSON w obie strony, błędy jako {@link ApiError} z komunikatem z serwera. */
 export async function request<T>(url: string, init?: RequestInit): Promise<T> {
+  const token = getToken()
   const response = await fetch(url, {
     ...init,
-    headers: { 'Content-Type': 'application/json', ...init?.headers },
+    headers: { 'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}`} : {}),
+      ...init?.headers },
   })
 
   if (!response.ok) {

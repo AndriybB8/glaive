@@ -1,3 +1,5 @@
+import type {ReactNode} from "react";
+
 interface NavTab {
   id: string
   label: string
@@ -7,10 +9,11 @@ interface NavTabsProps {
   brand: string
   tabs: readonly NavTab[]
   current: string
+  actions?: ReactNode
 }
 
 /** Górny pasek aplikacji z przełączaniem widoków. Zakładki prowadzą do `#<id>`. */
-export function NavTabs({ brand, tabs, current }: NavTabsProps) {
+export function NavTabs({ brand, tabs, current, actions }: NavTabsProps) {
   return (
     <header className="flex h-12 shrink-0 items-stretch gap-4 overflow-x-auto border-b border-slate-200 bg-white px-4 sm:gap-6 sm:px-5">
       <span className="flex items-center text-sm font-semibold whitespace-nowrap text-slate-900">{brand}</span>
@@ -33,6 +36,7 @@ export function NavTabs({ brand, tabs, current }: NavTabsProps) {
           )
         })}
       </nav>
+      {actions && <div className="ml-auto flex items-center">{actions}</div>}
     </header>
   )
 }
