@@ -38,7 +38,7 @@ public class User
     {
         if (time.Kind != DateTimeKind.Utc)
         {
-            throw new ArgumentException("The time must be UTC time. ", nameof(time));
+            throw new ArgumentException("DataCzas musi byc w UTC. ", nameof(time));
         }
     }
 
@@ -49,12 +49,12 @@ public class User
 
         if (email.Length > MaxEmailLength)
         {
-            throw new ArgumentException("The email is too long.", nameof(email));
+            throw new ArgumentException("Adres email jest za długi. ", nameof(email));
         }
 
         if (!IsValidEmail(email))
         {
-            throw new ArgumentException("The email is invalid.", nameof(email));
+            throw new ArgumentException("Adres email jest nieprawidłowy.", nameof(email));
         }
     }
 

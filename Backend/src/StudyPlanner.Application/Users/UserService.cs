@@ -16,22 +16,27 @@ public class UserService(IUserRepository repo, IPasswordHasher hasher, TimeProvi
 
         if (email.Length == 0)
             return UserResult<UserDto>.Failure(new UserError(UserErrorType.Validation,
-                "Please provide a valid email."));
+                "Podaj adres email."));
+
+        if (email.Length > User.MaxEmailLength)
+        {
+            return UserResult<UserDto>.Failure(new UserError(UserErrorType.Validation, "Adres email jest za długi."));
+        }
 
         if (!User.IsValidEmail(email))
         {
-            return UserResult<UserDto>.Failure(new UserError(UserErrorType.Validation, "Please provide a valid email."));
+            return UserResult<UserDto>.Failure(new UserError(UserErrorType.Validation, "Adres email jest nieprawidłowy."));
         }
 
         if (password.Length < MinPasswordLength)
         {
             return UserResult<UserDto>.Failure(new UserError(UserErrorType.Validation,
-                $"Password must be at least {MinPasswordLength} characters long."));
+                $"Hasło musi mieć co najmniej {MinPasswordLength} znaków."));
         }
 
         if (await repo.ExistsByEmailAsync(email, cancellationToken))
         {
-            return UserResult<UserDto>.Failure(new UserError(UserErrorType.Validation, "This email is already registered."));
+            return UserResult<UserDto>.Failure(new UserError(UserErrorType.Validation, "Ten adres email jest już zajęty."));
         }
 
         var hash = hasher.Hash(password);
