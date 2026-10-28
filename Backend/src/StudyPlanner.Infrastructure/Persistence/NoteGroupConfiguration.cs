@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 using StudyPlanner.Domain.NoteGroups;
+using StudyPlanner.Domain.Users;
 
 namespace StudyPlanner.Infrastructure.Persistence;
 
@@ -14,8 +15,12 @@ internal sealed class NoteGroupConfiguration : IEntityTypeConfiguration<NoteGrou
         builder.HasKey(g => g.Id).HasName("pk_note_groups");
         builder.Property(g => g.Id).HasColumnName("id").ValueGeneratedNever();
 
-        // TODO: klucz obcy do users(id), gdy powstanie tabela użytkowników (logowanie).
         builder.Property(g => g.UserId).HasColumnName("user_id");
+        builder.HasOne<User>()
+            .WithMany()
+            .HasForeignKey(g => g.UserId)
+            .HasConstraintName("fk_note_groups_users_user_id")
+            .OnDelete(DeleteBehavior.Cascade);
 
         builder.Property(g => g.Name).HasColumnName("name").HasMaxLength(NoteGroup.NameMaxLength).IsRequired();
 

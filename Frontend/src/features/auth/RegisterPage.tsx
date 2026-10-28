@@ -9,7 +9,11 @@ import {getPasswordStrength} from "./passwordStrength.ts";
 
 const MIN_PASSWORD_LENGTH = 8;
 
-export function RegisterPage() {
+interface RegisterPageProps {
+  onSwitchToLogin: () => void
+}
+
+export function RegisterPage({ onSwitchToLogin }: RegisterPageProps) {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
@@ -49,8 +53,11 @@ export function RegisterPage() {
 
     if (success) {
       return (
-        <div className="mx-auto max-w-sm px-4 py-10">
+        <div className="mx-auto flex max-w-sm flex-col gap-4 px-4 py-10">
           <p className="text-sm text-slate-700">Konto zostało utworzone. Możesz się teraz zalogować.</p>
+          <Button type="button" onClick={onSwitchToLogin}>
+            Przejdź do logowania
+          </Button>
         </div>
       )
     }
@@ -94,6 +101,13 @@ export function RegisterPage() {
         <Button type="submit" disabled={saving}>
           {saving ? 'Rejestrowanie…' : 'Zarejestruj się'}
         </Button>
+
+        <p className="text-center text-sm text-slate-600">
+          Masz już konto?{' '}
+          <button type="button" onClick={onSwitchToLogin} className="font-medium text-blue-700 hover:underline">
+            Zaloguj się
+          </button>
+        </p>
       </form>
     )
 }

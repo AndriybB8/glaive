@@ -35,9 +35,20 @@ Wartości w `.env.example` służą wyłącznie do pracy lokalnej.
 ### 2. Backend
 
 W katalogu głównym repozytorium wywołać:
+
+Ustawić sekrety lokalne (raz, dla swojego środowiska – nigdy nie trafiają do repozytorium):
+1. `dotnet user-secrets init --project src/StudyPlanner.Api`
+2. `dotnet user-secrets set “ConnectionStrings:Default” “Host=localhost;Port=<POSTGRES_PORT>;Database=<POSTGRES_DB>;Username=<POSTGRES_USER>;Password=<POSTGRES_PASSWORD>” --project src/StudyPlanner.Api`
+3. `dotnet user-secrets set “Jwt:Key” “<losowy string, min. 32 znaki – np. z openssl rand -base64 32>” --project src/StudyPlanner.Api`
+
+Wartości `<POSTGRES_*>` biorą się z pliku `.env` z kroku 1 ("Baza danych").
+
+Uruchomić:
 1. `cd Backend`
 2. `dotnet build`
 3. `dotnet run --project src/StudyPlanner.Api`
+
+
 
 Testy: `dotnet test`
 

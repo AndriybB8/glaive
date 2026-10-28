@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 using StudyPlanner.Domain.Schedules;
+using StudyPlanner.Domain.Users;
 
 namespace StudyPlanner.Infrastructure.Persistence;
 
@@ -15,8 +16,12 @@ internal sealed class ScheduleConfiguration : IEntityTypeConfiguration<Schedule>
         builder.HasKey(s => s.Id).HasName("pk_schedules");
         builder.Property(s => s.Id).HasColumnName("id").ValueGeneratedNever();
 
-        // TODO: klucz obcy do users(id), gdy powstanie tabela użytkowników (logowanie).
         builder.Property(s => s.UserId).HasColumnName("user_id");
+        builder.HasOne<User>()
+            .WithMany()
+            .HasForeignKey(s => s.UserId)
+            .HasConstraintName("fk_schedules_users_user_id")
+            .OnDelete(DeleteBehavior.Cascade);
         builder.HasIndex(s => s.UserId).HasDatabaseName("ix_schedules_user_id");
 
         builder.Property(s => s.Name).HasColumnName("name").HasMaxLength(Schedule.NameMaxLength).IsRequired();

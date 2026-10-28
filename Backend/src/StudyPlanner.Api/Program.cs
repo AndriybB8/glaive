@@ -1,7 +1,11 @@
+using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using System.Threading.RateLimiting;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.EntityFrameworkCore;
-using StudyPlanner.Api.Services;
+using Microsoft.IdentityModel.Tokens;
 using StudyPlanner.Application.Common;
 using StudyPlanner.Application.NoteGroups;
 using StudyPlanner.Application.Notes;
@@ -39,11 +43,12 @@ if (string.IsNullOrWhiteSpace(connectionString) && !EF.IsDesignTime)
         "--project src/StudyPlanner.Api");
 }
 
+var jwtKey = builder.Configuration["Jwt:Key"] ?? throw new InvalidOperationException("Brak Jwt:Key. Sprawdz README.md");
+
 builder.Services.AddDbContext<AppDbContext>(options => options.UseNpgsql(connectionString));
 
 builder.Services.AddSingleton(TimeProvider.System);
-// TODO: po wdrożeniu logowania (JWT) podmienić na implementację czytającą użytkownika z tokenu.
-builder.Services.AddScoped<ICurrentUser, DevCurrentUser>();
+builder.Services.AddScoped<ICurrentUser, HttpContextCurrentUser>();
 builder.Services.AddScoped<NoteService>();
 builder.Services.AddScoped<INoteRepository, EfNoteRepository>();
 builder.Services.AddScoped<NoteGroupService>();
@@ -56,8 +61,44 @@ builder.Services.AddScoped<TaskService>();
 builder.Services.AddScoped<ITaskRepository, EfTaskRepository>();
 
 builder.Services.AddSingleton<IPasswordHasher, PasswordHasher>();
+builder.Services.AddScoped<ITokenGenerator, JwtTokenGenerator>();
 builder.Services.AddScoped<UserService>();
 builder.Services.AddScoped<IUserRepository, EfUserRepository>();
+
+builder.Services.AddHttpContextAccessor();
+builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+    .AddJwtBearer(options =>
+    {
+        options.MapInboundClaims = false;
+        options.TokenValidationParameters = new TokenValidationParameters
+        {
+            ValidateIssuerSigningKey = true,
+            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtKey)),
+            ValidateIssuer = false,
+            ValidateAudience = false
+        };
+    });
+
+builder.Services.AddAuthorization(options =>
+    {
+        options.FallbackPolicy = new AuthorizationPolicyBuilder()
+            .RequireAuthenticatedUser()
+            .Build();
+    });
+
+builder.Services.AddRateLimiter(options =>
+{
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+
+    options.AddPolicy("login", httpContext => RateLimitPartition.GetFixedWindowLimiter(
+            partitionKey: httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+            factory: _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 5,
+                Window = TimeSpan.FromMinutes(1),
+                QueueLimit = 0,
+            }));
+});
 
 var app = builder.Build();
 
@@ -73,6 +114,9 @@ if (app.Environment.IsDevelopment())
 
 app.UseHttpsRedirection();
 
+app.UseRateLimiter();
+
+app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapControllers();

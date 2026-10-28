@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 using StudyPlanner.Domain.Schedules;
 using StudyPlanner.Domain.Tasks;
+using StudyPlanner.Domain.Users;
 
 namespace StudyPlanner.Infrastructure.Persistence;
 
@@ -27,8 +28,12 @@ internal sealed class TaskConfiguration : IEntityTypeConfiguration<TaskItem>
             .OnDelete(DeleteBehavior.Cascade);
         builder.HasIndex(t => t.ScheduleId).HasDatabaseName("ix_tasks_schedule_id");
 
-        // TODO: klucz obcy do users(id), gdy powstanie tabela użytkowników (logowanie).
         builder.Property(t => t.UserId).HasColumnName("user_id");
+        builder.HasOne<User>()
+            .WithMany()
+            .HasForeignKey(t => t.UserId)
+            .HasConstraintName("fk_tasks_users_user_id")
+            .OnDelete(DeleteBehavior.Cascade);
         builder.HasIndex(t => t.UserId).HasDatabaseName("ix_tasks_user_id");
 
         builder.Property(t => t.Title).HasColumnName("title").HasMaxLength(TaskItem.TitleMaxLength).IsRequired();

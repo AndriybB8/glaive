@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 using StudyPlanner.Domain.NoteGroups;
 using StudyPlanner.Domain.Notes;
+using StudyPlanner.Domain.Users;
 
 namespace StudyPlanner.Infrastructure.Persistence;
 
@@ -15,8 +16,12 @@ internal sealed class NoteConfiguration : IEntityTypeConfiguration<Note>
         builder.HasKey(n => n.Id).HasName("pk_notes");
         builder.Property(n => n.Id).HasColumnName("id").ValueGeneratedNever();
 
-        // TODO: klucz obcy do users(id), gdy powstanie tabela użytkowników (logowanie).
         builder.Property(n => n.AuthorId).HasColumnName("author_id");
+        builder.HasOne<User>()
+            .WithMany()
+            .HasForeignKey(n => n.AuthorId)
+            .HasConstraintName("fk_notes_users_author_id")
+            .OnDelete(DeleteBehavior.Cascade);
         builder.HasIndex(n => n.AuthorId).HasDatabaseName("ix_notes_author_id");
 
         // Usunięcie grupy nie usuwa notatek – baza ustawia im group_id = NULL („Bez grupy”).

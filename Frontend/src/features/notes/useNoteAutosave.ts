@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { NoteConflictError, updateNote, updateNoteOnExit } from './api'
+import { isNoteConflict, updateNote, updateNoteOnExit } from './api'
 import type { Note, NoteDraft } from './types'
 
 export type SaveStatus = 'saved' | 'pending' | 'saving' | 'error' | 'conflict'
@@ -62,7 +62,7 @@ export function useNoteAutosave(note: Note, onSaved: (note: Note) => void) {
       }
     } catch (error) {
       dirtyRef.current = true
-      if (error instanceof NoteConflictError) {
+      if (isNoteConflict(error)) {
         blockedRef.current = true
         setConflict(error.current)
         setStatus('conflict')

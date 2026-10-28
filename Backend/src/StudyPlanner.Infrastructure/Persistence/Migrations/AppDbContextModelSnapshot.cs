@@ -294,6 +294,16 @@ namespace StudyPlanner.Infrastructure.Persistence.Migrations
                         });
                 });
 
+            modelBuilder.Entity("StudyPlanner.Domain.NoteGroups.NoteGroup", b =>
+                {
+                    b.HasOne("StudyPlanner.Domain.Users.User", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_note_groups_users_user_id");
+                });
+
             modelBuilder.Entity("StudyPlanner.Domain.NoteTasks.NoteTaskLink", b =>
                 {
                     b.HasOne("StudyPlanner.Domain.Notes.Note", null)
@@ -313,11 +323,28 @@ namespace StudyPlanner.Infrastructure.Persistence.Migrations
 
             modelBuilder.Entity("StudyPlanner.Domain.Notes.Note", b =>
                 {
+                    b.HasOne("StudyPlanner.Domain.Users.User", null)
+                        .WithMany()
+                        .HasForeignKey("AuthorId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_notes_users_author_id");
+
                     b.HasOne("StudyPlanner.Domain.NoteGroups.NoteGroup", null)
                         .WithMany()
                         .HasForeignKey("GroupId")
                         .OnDelete(DeleteBehavior.SetNull)
                         .HasConstraintName("fk_notes_note_groups_group_id");
+                });
+
+            modelBuilder.Entity("StudyPlanner.Domain.Schedules.Schedule", b =>
+                {
+                    b.HasOne("StudyPlanner.Domain.Users.User", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_schedules_users_user_id");
                 });
 
             modelBuilder.Entity("StudyPlanner.Domain.Tasks.TaskItem", b =>
@@ -328,6 +355,13 @@ namespace StudyPlanner.Infrastructure.Persistence.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired()
                         .HasConstraintName("fk_tasks_schedules_schedule_id");
+
+                    b.HasOne("StudyPlanner.Domain.Users.User", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_tasks_users_user_id");
                 });
 #pragma warning restore 612, 618
         }

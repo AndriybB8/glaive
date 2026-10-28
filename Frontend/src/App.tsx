@@ -3,12 +3,14 @@ import { NavTabs } from './components/ui/NavTabs'
 import { NotesPage } from './features/notes/NotesPage'
 import { SchedulesPage } from './features/schedules/SchedulesPage'
 import {RegisterPage} from "./features/auth/RegisterPage.tsx";
+import {LoginPage} from './features/auth/LoginPage'
+import { getToken, clearToken } from './lib/authToken'
+import { Button } from './components/ui/Button'
 
 
 const pages = [
   { id: 'notatki', label: 'Notatki' },
   { id: 'harmonogramy', label: 'Harmonogramy' },
-  { id: 'rejestracja', label: 'Rejestracja' },
 ] as const
 
 type PageId = (typeof pages)[number]['id']
@@ -22,6 +24,8 @@ function pageFromHash(): PageId {
 // Gdy widoków przybędzie albo będą potrzebne podstrony, warto przejść na router.
 function App() {
   const [page, setPage] = useState(pageFromHash)
+  const [isAuthenticated, setIsAuthenticated] = useState(() => getToken() !== null)
+  const [authScreen, setAuthScreen] = useState<'login' | 'register'>('login')
 
   useEffect(() => {
     const handleHashChange = () => setPage(pageFromHash())
@@ -29,10 +33,30 @@ function App() {
     return () => window.removeEventListener('hashchange', handleHashChange)
   }, [])
 
+  if (!isAuthenticated) {
+    return authScreen === 'login' ? (
+      <LoginPage onLoggedIn={() => setIsAuthenticated(true)} onSwitchToRegister={() => setAuthScreen('register')} />
+    ) : (
+      <RegisterPage onSwitchToLogin={() => setAuthScreen('login')} />
+    )
+  }
+
   return (
     <div className="flex h-dvh flex-col bg-white text-slate-900">
-      <NavTabs brand="StudyPlanner" tabs={pages} current={page} />
-      <div className="min-h-0 flex-1">{page === 'harmonogramy' ? <SchedulesPage /> : page === 'rejestracja' ? <RegisterPage /> : <NotesPage />}</div>
+      <NavTabs
+        brand="StudyPlanner"
+        tabs={pages}
+        current={page}
+        actions={
+          <Button
+            variant="ghost-danger"
+            onClick={() => {
+              clearToken()
+              setIsAuthenticated(false)
+            }}>Wyloguj się</Button>
+        }
+      />
+      <div className="min-h-0 flex-1">{page === 'harmonogramy' ? <SchedulesPage /> : <NotesPage />}</div>
     </div>
   )
 }
