@@ -6,11 +6,13 @@ import {RegisterPage} from "./features/auth/RegisterPage.tsx";
 import {LoginPage} from './features/auth/LoginPage'
 import { getToken, clearToken } from './lib/authToken'
 import { Button } from './components/ui/Button'
+import { PomodoroPage } from './features/pomodoro/PomodoroPage'
 
 
 const pages = [
   { id: 'notatki', label: 'Notatki' },
   { id: 'harmonogramy', label: 'Harmonogramy' },
+  { id: 'pomodoro', label: 'Pomodoro' },
 ] as const
 
 type PageId = (typeof pages)[number]['id']
@@ -56,7 +58,9 @@ function App() {
             }}>Wyloguj się</Button>
         }
       />
-      <div className="min-h-0 flex-1">{page === 'harmonogramy' ? <SchedulesPage /> : <NotesPage />}</div>
+      <div className="min-h-0 flex-1">
+        {page === 'harmonogramy' ? <SchedulesPage /> : page === 'pomodoro' ? <PomodoroPage /> : <NotesPage />}
+      </div>
     </div>
   )
 }
