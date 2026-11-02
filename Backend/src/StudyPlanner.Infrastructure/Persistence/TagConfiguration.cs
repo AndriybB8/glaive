@@ -14,7 +14,7 @@ public class TagConfiguration : IEntityTypeConfiguration<Tag>
         builder.HasKey(t => t.Id).HasName("pk_tags");
         builder.Property(t => t.Id).HasColumnName("id").ValueGeneratedNever();
 
-        builder.Property(t => t.Name).HasColumnName("user_id");
+        builder.Property(t => t.UserId).HasColumnName("user_id");
         builder.HasOne<User>()
             .WithMany()
             .HasForeignKey(t => t.UserId)
