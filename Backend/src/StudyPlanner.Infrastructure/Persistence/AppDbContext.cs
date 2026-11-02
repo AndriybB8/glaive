@@ -3,6 +3,7 @@ using StudyPlanner.Domain.NoteGroups;
 using StudyPlanner.Domain.Notes;
 using StudyPlanner.Domain.NoteTasks;
 using StudyPlanner.Domain.Schedules;
+using StudyPlanner.Domain.Tags;
 using StudyPlanner.Domain.Tasks;
 using StudyPlanner.Domain.Users;
 
@@ -26,6 +27,8 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
     public DbSet<TaskItem> Tasks => Set<TaskItem>();
 
     public DbSet<User> Users => Set<User>();
+
+    public DbSet<Tag> Tags => Set<Tag>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
