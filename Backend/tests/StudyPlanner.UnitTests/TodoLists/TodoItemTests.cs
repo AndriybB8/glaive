@@ -110,6 +110,32 @@ public class TodoItemTests
     }
 
     [Fact]
+    public void Update_ChangesTitleAndDoneWithSingleVersionBump()
+    {
+        var item = TodoItem.Create(UserId, ListId, "Zadanie", 0, Now);
+        var later = Now.AddMinutes(5);
+
+        item.Update("Zadanie poprawione", true, later);
+
+        Assert.Equal("Zadanie poprawione", item.Title);
+        Assert.True(item.IsDone);
+        Assert.Equal(later, item.CompletedAt);
+        Assert.Equal(2, item.Version);
+    }
+
+    [Fact]
+    public void Update_KeepingDone_DoesNotChangeCompletedAt()
+    {
+        var item = TodoItem.Create(UserId, ListId, "Zadanie", 0, Now);
+        var doneAt = Now.AddMinutes(5);
+        item.SetDone(true, doneAt);
+
+        item.Update("Zadanie poprawione", true, Now.AddMinutes(10));
+
+        Assert.Equal(doneAt, item.CompletedAt);
+    }
+
+    [Fact]
     public void MoveTo_ChangesPosition()
     {
         var item = TodoItem.Create(UserId, ListId, "Zadanie", 0, Now);
