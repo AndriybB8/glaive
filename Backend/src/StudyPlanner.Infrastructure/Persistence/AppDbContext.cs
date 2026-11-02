@@ -5,6 +5,7 @@ using StudyPlanner.Domain.NoteTasks;
 using StudyPlanner.Domain.Schedules;
 using StudyPlanner.Domain.Tags;
 using StudyPlanner.Domain.Tasks;
+using StudyPlanner.Domain.TodoLists;
 using StudyPlanner.Domain.Users;
 
 namespace StudyPlanner.Infrastructure.Persistence;
@@ -29,6 +30,10 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
     public DbSet<User> Users => Set<User>();
 
     public DbSet<Tag> Tags => Set<Tag>();
+
+    public DbSet<TodoList> TodoLists => Set<TodoList>();
+
+    public DbSet<TodoItem> TodoItems => Set<TodoItem>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

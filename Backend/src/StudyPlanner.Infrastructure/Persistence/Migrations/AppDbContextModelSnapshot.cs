@@ -299,6 +299,108 @@ namespace StudyPlanner.Infrastructure.Persistence.Migrations
                         });
                 });
 
+            modelBuilder.Entity("StudyPlanner.Domain.TodoLists.TodoItem", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTime?>("CompletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("completed_at");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<bool>("IsDone")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("is_done");
+
+                    b.Property<Guid>("ListId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("list_id");
+
+                    b.Property<int>("Position")
+                        .HasColumnType("integer")
+                        .HasColumnName("position");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("title");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("user_id");
+
+                    b.Property<int>("Version")
+                        .IsConcurrencyToken()
+                        .HasColumnType("integer")
+                        .HasColumnName("version");
+
+                    b.HasKey("Id")
+                        .HasName("pk_todo_items");
+
+                    b.HasIndex("UserId")
+                        .HasDatabaseName("ix_todo_items_user_id");
+
+                    b.HasIndex("ListId", "Position")
+                        .HasDatabaseName("ix_todo_items_list_id_position");
+
+                    b.ToTable("todo_items", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_todo_items_completed_at", "(is_done AND completed_at IS NOT NULL) OR (NOT is_done AND completed_at IS NULL)");
+
+                            t.HasCheckConstraint("ck_todo_items_position", "position >= 0");
+                        });
+                });
+
+            modelBuilder.Entity("StudyPlanner.Domain.TodoLists.TodoList", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("title");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("user_id");
+
+                    b.Property<int>("Version")
+                        .IsConcurrencyToken()
+                        .HasColumnType("integer")
+                        .HasColumnName("version");
+
+                    b.HasKey("Id")
+                        .HasName("pk_todo_lists");
+
+                    b.HasIndex("UserId")
+                        .HasDatabaseName("ix_todo_lists_user_id");
+
+                    b.ToTable("todo_lists", (string)null);
+                });
+
             modelBuilder.Entity("StudyPlanner.Domain.Users.User", b =>
                 {
                     b.Property<Guid>("Id")
@@ -417,6 +519,33 @@ namespace StudyPlanner.Infrastructure.Persistence.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired()
                         .HasConstraintName("fk_tasks_users_user_id");
+                });
+
+            modelBuilder.Entity("StudyPlanner.Domain.TodoLists.TodoItem", b =>
+                {
+                    b.HasOne("StudyPlanner.Domain.TodoLists.TodoList", null)
+                        .WithMany()
+                        .HasForeignKey("ListId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_todo_items_todo_lists_list_id");
+
+                    b.HasOne("StudyPlanner.Domain.Users.User", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_todo_items_users_user_id");
+                });
+
+            modelBuilder.Entity("StudyPlanner.Domain.TodoLists.TodoList", b =>
+                {
+                    b.HasOne("StudyPlanner.Domain.Users.User", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_todo_lists_users_user_id");
                 });
 #pragma warning restore 612, 618
         }
