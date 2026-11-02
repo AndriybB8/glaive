@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using StudyPlanner.Domain.NoteGroups;
 using StudyPlanner.Domain.Notes;
 using StudyPlanner.Domain.NoteTasks;
+using StudyPlanner.Domain.Pomodoro;
 using StudyPlanner.Domain.Schedules;
 using StudyPlanner.Domain.Tags;
 using StudyPlanner.Domain.Tasks;
@@ -34,6 +35,9 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
     public DbSet<TodoList> TodoLists => Set<TodoList>();
 
     public DbSet<TodoItem> TodoItems => Set<TodoItem>();
+
+    /// <summary>Ustawienia timera Pomodoro – jeden wiersz na użytkownika.</summary>
+    public DbSet<PomodoroSettings> PomodoroSettings => Set<PomodoroSettings>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
