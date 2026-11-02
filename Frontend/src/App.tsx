@@ -9,6 +9,7 @@ import { Button } from './components/ui/Button'
 import { PomodoroProvider } from './features/pomodoro/PomodoroProvider'
 import { PomodoroPage } from './features/pomodoro/PomodoroPage'
 import { PomodoroNavBadge } from './features/pomodoro/PomodoroNavBadge'
+import { PomodoroAlertToast } from './features/pomodoro/PomodoroAlertToast'
 import { clearStoredPomodoro } from './features/pomodoro/pomodoroContext'
 
 
@@ -71,6 +72,7 @@ function App() {
           {page === 'harmonogramy' ? <SchedulesPage /> : page === 'pomodoro' ? <PomodoroPage /> : <NotesPage />}
         </div>
       </div>
+      <PomodoroAlertToast />
     </PomodoroProvider>
   )
 }

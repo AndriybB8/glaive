@@ -143,9 +143,28 @@ export function PomodoroPage() {
         </div>
 
         <section aria-labelledby={`${volumeId}-heading`} className="flex w-full flex-col gap-4 rounded-lg border border-slate-200 p-4">
-          <h2 id={`${volumeId}-heading`} className="text-sm font-semibold text-slate-900">
-            Dźwięk na koniec fazy
-          </h2>
+          <div className="flex items-center justify-between gap-3">
+            <h2 id={`${volumeId}-heading`} className="text-sm font-semibold text-slate-900">
+              Dźwięk na koniec fazy
+            </h2>
+            <button
+              type="button"
+              role="switch"
+              aria-checked={!soundSettings.muted}
+              onClick={() => updateSoundSettings({ muted: !soundSettings.muted })}
+              className="flex min-h-11 items-center gap-2 rounded-full px-1 text-sm text-slate-700 focus-visible:outline-2 focus-visible:outline-blue-600 sm:min-h-8"
+            >
+              <span
+                aria-hidden
+                className={`relative h-6 w-11 shrink-0 rounded-full transition-colors ${soundSettings.muted ? 'bg-slate-300' : 'bg-blue-600'}`}
+              >
+                <span
+                  className={`absolute top-0.5 size-5 rounded-full bg-white shadow transition-[left] ${soundSettings.muted ? 'left-0.5' : 'left-5.5'}`}
+                />
+              </span>
+              {soundSettings.muted ? 'Wyciszony' : 'Włączony'}
+            </button>
+          </div>
           <SelectField
             label="Dźwięk"
             options={POMODORO_SOUNDS}
@@ -181,6 +200,10 @@ export function PomodoroPage() {
             sesjach {settings.longBreakMinutes} min długiej przerwy. Przerwy i praca zmieniają się same.
           </p>
           <p className="mt-1">Timer działa dalej, gdy przejdziesz do notatek, przełączysz kartę albo odświeżysz stronę.</p>
+          <p className="mt-1">
+            Koniec fazy zawsze widać też na ekranie i w tytule karty (🔔) – także przy wyciszonym dźwięku. Przeglądarka nie
+            zna trybu wyciszenia telefonu, dlatego dźwięk wyciszasz tutaj.
+          </p>
         </div>
       </div>
     </div>

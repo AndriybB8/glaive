@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import { POMODORO_STORAGE_KEY, PomodoroContext, type PomodoroContextValue } from './pomodoroContext'
+import { POMODORO_STORAGE_KEY, PomodoroContext, type PomodoroAlert, type PomodoroContextValue } from './pomodoroContext'
 import {
   POMODORO_SOUND_STORAGE_KEY,
   parseSoundSettings,
@@ -41,6 +41,14 @@ const ALERT_FRESH_MS = 90_000
  */
 const LAST_ALERT_STORAGE_KEY = 'SP.pomodoroLastAlert'
 
+/** Komunikat o końcu fazy znika sam po tym czasie, liczonym od chwili, gdy karta jest widoczna. */
+const ALERT_VISIBLE_MS = 20_000
+
+/** Krótki tekst do tytułu karty – widać go nawet wtedy, gdy aplikacja jest w tle i dźwięk jest wyciszony. */
+function alertTitle(alert: PomodoroAlert): string {
+  return alert.endedPhase === 'work' ? 'Czas na przerwę' : 'Czas wracać do pracy'
+}
+
 function readStoredState(settings: PomodoroSettings): PomodoroState | null {
   try {
     const raw = localStorage.getItem(POMODORO_STORAGE_KEY)
@@ -79,7 +87,7 @@ interface PomodoroProviderProps {
 /**
  * Timer Pomodoro dla całej aplikacji. Siedzi nad zakładkami (w App), więc działa dalej po przejściu
  * do notatek czy harmonogramów. Stan zapisuje w localStorage: przetrwa odświeżenie strony,
- * a druga karta z aplikacją pokazuje ten sam timer. Na koniec fazy odtwarza wybrany dźwięk.
+ * a druga karta z aplikacją pokazuje ten sam timer. Na koniec fazy pokazuje komunikat i (bez wyciszenia) gra dźwięk.
  */
 export function PomodoroProvider({ settings = DEFAULT_POMODORO_SETTINGS, children }: PomodoroProviderProps) {
   // Po odświeżeniu strony od razu nadrabiamy fazy, które skończyły się w międzyczasie (bez dźwięku).
@@ -89,6 +97,7 @@ export function PomodoroProvider({ settings = DEFAULT_POMODORO_SETTINGS, childre
   })
   const [now, setNow] = useState(() => Date.now())
   const [soundSettings, setSoundSettings] = useState<PomodoroSoundSettings>(readSoundSettings)
+  const [alert, setAlert] = useState<PomodoroAlert | null>(null)
   const running = state.endsAt !== null
 
   // Aktualny stan także poza renderowaniem (tyknięcia, zdarzenia). Każda zmiana stanu przechodzi przez commit(),
@@ -104,10 +113,28 @@ export function PomodoroProvider({ settings = DEFAULT_POMODORO_SETTINGS, childre
     setState(next)
   }, [])
 
+  /**
+   * Koniec fazy: komunikat na ekranie pokazuje każda karta, a dźwięk gra jedna (i tylko bez wyciszenia).
+   * Gdy przeglądarka zablokuje dźwięk, komunikat to mówi – sygnał wizualny jest zawsze.
+   */
   const announcePhaseEnd = useCallback((result: AdvanceResult, time: number) => {
-    if (result.lastEndedAt === null || time - result.lastEndedAt > ALERT_FRESH_MS) return
-    if (!claimAlert(result.lastEndedAt)) return
-    void playPomodoroSound(soundRef.current.soundId, soundRef.current.volume)
+    const endedAt = result.lastEndedAt
+    if (endedAt === null || time - endedAt > ALERT_FRESH_MS) return
+
+    setAlert({
+      endedPhase: result.endedPhases[result.endedPhases.length - 1],
+      nextPhase: result.state.phase,
+      endedAt,
+      soundBlocked: false,
+    })
+
+    const sound = soundRef.current
+    if (sound.muted || !claimAlert(endedAt)) return
+    void playPomodoroSound(sound.soundId, sound.volume).then((played) => {
+      if (!played) {
+        setAlert((current) => (current?.endedAt === endedAt ? { ...current, soundBlocked: true } : current))
+      }
+    })
   }, [])
 
   /** Aktualizuje zegar i przełącza fazy, które już się skończyły. */
@@ -125,6 +152,7 @@ export function PomodoroProvider({ settings = DEFAULT_POMODORO_SETTINGS, childre
   const act = useCallback(
     (action: (current: PomodoroState, time: number) => PomodoroState) => {
       unlockAudio()
+      setAlert(null)
       const time = Date.now()
       setNow(time)
       commit(action(advance(stateRef.current, settings, time).state, time))
@@ -201,15 +229,35 @@ export function PomodoroProvider({ settings = DEFAULT_POMODORO_SETTINGS, childre
   const remainingMs = getRemainingMs(state, now)
   const remainingText = formatRemaining(remainingMs)
 
-  // Czas w tytule karty – widać go także wtedy, gdy aplikacja jest w tle.
+  // Czas w tytule karty – widać go także wtedy, gdy aplikacja jest w tle. Po końcu fazy z dzwonkiem 🔔.
   useEffect(() => {
-    if (!running) return
+    if (!running && !alert) return
     const originalTitle = document.title
-    document.title = `${remainingText} · ${PHASE_LABELS[state.phase]}`
+    document.title = alert ? `🔔 ${alertTitle(alert)} · ${remainingText}` : `${remainingText} · ${PHASE_LABELS[state.phase]}`
     return () => {
       document.title = originalTitle
     }
-  }, [running, remainingText, state.phase])
+  }, [running, remainingText, state.phase, alert])
+
+  // Komunikat znika sam dopiero wtedy, gdy użytkownik mógł go zobaczyć (karta widoczna przez ALERT_VISIBLE_MS).
+  useEffect(() => {
+    if (!alert) return
+    let timer: number | undefined
+    const schedule = () => {
+      window.clearTimeout(timer)
+      if (document.visibilityState === 'visible') {
+        timer = window.setTimeout(() => setAlert(null), ALERT_VISIBLE_MS)
+      }
+    }
+    schedule()
+    document.addEventListener('visibilitychange', schedule)
+    return () => {
+      window.clearTimeout(timer)
+      document.removeEventListener('visibilitychange', schedule)
+    }
+  }, [alert])
+
+  const dismissAlert = useCallback(() => setAlert(null), [])
 
   const updateSoundSettings = useCallback((change: Partial<PomodoroSoundSettings>) => {
     setSoundSettings((current) => parseSoundSettings({ ...current, ...change }))
@@ -237,8 +285,10 @@ export function PomodoroProvider({ settings = DEFAULT_POMODORO_SETTINGS, childre
       soundSettings,
       updateSoundSettings,
       previewSound,
+      alert,
+      dismissAlert,
     }),
-    [state, settings, remainingMs, running, act, soundSettings, updateSoundSettings, previewSound],
+    [state, settings, remainingMs, running, act, soundSettings, updateSoundSettings, previewSound, alert, dismissAlert],
   )
 
   return <PomodoroContext.Provider value={value}>{children}</PomodoroContext.Provider>

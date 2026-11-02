@@ -19,11 +19,14 @@ export interface PomodoroSoundSettings {
   soundId: PomodoroSoundId
   /** Głośność 0–100 (%). */
   volume: number
+  /** Wyciszenie w aplikacji – przeglądarka nie zna stanu wyciszenia telefonu, więc to osobny przełącznik. */
+  muted: boolean
 }
 
 export const DEFAULT_SOUND_SETTINGS: PomodoroSoundSettings = {
   soundId: 'bell',
   volume: 70,
+  muted: false,
 }
 
 /** Klucz w localStorage. Ustawienia dźwięku są ustawieniem tego urządzenia, więc zostają po wylogowaniu. */
@@ -34,7 +37,8 @@ export function parseSoundSettings(value: unknown): PomodoroSoundSettings {
   const v = typeof value === 'object' && value !== null ? (value as Record<string, unknown>) : {}
   const soundId = POMODORO_SOUNDS.some((s) => s.value === v.soundId) ? (v.soundId as PomodoroSoundId) : DEFAULT_SOUND_SETTINGS.soundId
   const volume = Number.isFinite(v.volume) ? Math.min(100, Math.max(0, Math.round(v.volume as number))) : DEFAULT_SOUND_SETTINGS.volume
-  return { soundId, volume }
+  const muted = typeof v.muted === 'boolean' ? v.muted : DEFAULT_SOUND_SETTINGS.muted
+  return { soundId, volume, muted }
 }
 
 /** Maksymalne wzmocnienie przy 100% – zostawia zapas, żeby dźwięk nie przesterował. */
