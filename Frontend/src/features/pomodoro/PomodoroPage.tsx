@@ -1,5 +1,8 @@
+import { useId } from 'react'
 import { Button } from '../../components/ui/Button'
+import { SelectField } from '../../components/ui/SelectField'
 import { usePomodoro } from './pomodoroContext'
+import { POMODORO_SOUNDS, type PomodoroSoundId } from './pomodoroSound'
 import { PHASE_LABELS, currentSessionNumber, formatRemaining, type PomodoroPhase } from './pomodoroTimer'
 
 /** Kolor fazy wzmacnia tylko jej nazwę, która zawsze jest napisana obok. */
@@ -17,8 +20,24 @@ const RING_RADIUS = (RING_SIZE - RING_STROKE) / 2
 const RING_CIRCUMFERENCE = 2 * Math.PI * RING_RADIUS
 
 export function PomodoroPage() {
-  const { state, settings, remainingMs, phaseDurationMs, running, atPhaseStart, nextPhase, start, pause, reset, skip, restartCycle } =
-    usePomodoro()
+  const {
+    state,
+    settings,
+    remainingMs,
+    phaseDurationMs,
+    running,
+    atPhaseStart,
+    nextPhase,
+    start,
+    pause,
+    reset,
+    skip,
+    restartCycle,
+    soundSettings,
+    updateSoundSettings,
+    previewSound,
+  } = usePomodoro()
+  const volumeId = useId()
 
   const styles = phaseStyles[state.phase]
   const fraction = phaseDurationMs > 0 ? remainingMs / phaseDurationMs : 0
@@ -123,12 +142,68 @@ export function PomodoroPage() {
           )}
         </div>
 
+        <section aria-labelledby={`${volumeId}-heading`} className="flex w-full flex-col gap-4 rounded-lg border border-slate-200 p-4">
+          <div className="flex items-center justify-between gap-3">
+            <h2 id={`${volumeId}-heading`} className="text-sm font-semibold text-slate-900">
+              Dźwięk na koniec fazy
+            </h2>
+            <button
+              type="button"
+              role="switch"
+              aria-checked={!soundSettings.muted}
+              onClick={() => updateSoundSettings({ muted: !soundSettings.muted })}
+              className="flex min-h-11 items-center gap-2 rounded-full px-1 text-sm text-slate-700 focus-visible:outline-2 focus-visible:outline-blue-600 sm:min-h-8"
+            >
+              <span
+                aria-hidden
+                className={`relative h-6 w-11 shrink-0 rounded-full transition-colors ${soundSettings.muted ? 'bg-slate-300' : 'bg-blue-600'}`}
+              >
+                <span
+                  className={`absolute top-0.5 size-5 rounded-full bg-white shadow transition-[left] ${soundSettings.muted ? 'left-0.5' : 'left-5.5'}`}
+                />
+              </span>
+              {soundSettings.muted ? 'Wyciszony' : 'Włączony'}
+            </button>
+          </div>
+          <SelectField
+            label="Dźwięk"
+            options={POMODORO_SOUNDS}
+            value={soundSettings.soundId}
+            onChange={(event) => updateSoundSettings({ soundId: event.target.value as PomodoroSoundId })}
+          />
+          <div className="flex flex-col gap-1.5">
+            <div className="flex items-baseline justify-between">
+              <label htmlFor={volumeId} className="text-sm font-medium text-slate-700">
+                Głośność
+              </label>
+              <span className="text-sm text-slate-600 tabular-nums">{soundSettings.volume}%</span>
+            </div>
+            <input
+              id={volumeId}
+              type="range"
+              min={0}
+              max={100}
+              step={5}
+              value={soundSettings.volume}
+              onChange={(event) => updateSoundSettings({ volume: Number(event.target.value) })}
+              className="h-11 w-full accent-blue-600 sm:h-8"
+            />
+          </div>
+          <Button variant="secondary" onClick={previewSound} className="min-h-11 self-start sm:min-h-9">
+            Odsłuchaj
+          </Button>
+        </section>
+
         <div className="w-full rounded-lg bg-slate-50 px-4 py-3 text-sm text-slate-600">
           <p>
             {settings.workMinutes} min pracy, {settings.shortBreakMinutes} min przerwy, a po {settings.sessionsBeforeLongBreak}{' '}
             sesjach {settings.longBreakMinutes} min długiej przerwy. Przerwy i praca zmieniają się same.
           </p>
           <p className="mt-1">Timer działa dalej, gdy przejdziesz do notatek, przełączysz kartę albo odświeżysz stronę.</p>
+          <p className="mt-1">
+            Koniec fazy zawsze widać też na ekranie i w tytule karty (🔔) – także przy wyciszonym dźwięku. Przeglądarka nie
+            zna trybu wyciszenia telefonu, dlatego dźwięk wyciszasz tutaj.
+          </p>
         </div>
       </div>
     </div>

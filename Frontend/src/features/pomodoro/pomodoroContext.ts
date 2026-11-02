@@ -1,8 +1,19 @@
 import { createContext, useContext } from 'react'
+import type { PomodoroSoundSettings } from './pomodoroSound'
 import type { PomodoroPhase, PomodoroSettings, PomodoroState } from './pomodoroTimer'
 
 /** Klucz w localStorage (jak `SP.token`). Stan timera przetrwa odświeżenie strony i jest wspólny dla kart. */
 export const POMODORO_STORAGE_KEY = 'SP.pomodoro'
+
+/** Komunikat o końcu fazy – pokazywany zawsze, także bez dźwięku. */
+export interface PomodoroAlert {
+  endedPhase: PomodoroPhase
+  nextPhase: PomodoroPhase
+  /** Moment końca fazy (ms od epoki). */
+  endedAt: number
+  /** Dźwięk miał zagrać, ale przeglądarka go zablokowała. */
+  soundBlocked: boolean
+}
 
 export interface PomodoroContextValue {
   state: PomodoroState
@@ -23,6 +34,14 @@ export interface PomodoroContextValue {
   skip: () => void
   /** Wraca do 1. sesji pracy. */
   restartCycle: () => void
+  /** Dźwięk na koniec fazy: wybrany dźwięk i głośność (zapamiętane na tym urządzeniu). */
+  soundSettings: PomodoroSoundSettings
+  updateSoundSettings: (change: Partial<PomodoroSoundSettings>) => void
+  /** Odtwarza wybrany dźwięk od razu („Odsłuchaj”). */
+  previewSound: () => void
+  /** Ostatni koniec fazy do pokazania na ekranie; null = brak. */
+  alert: PomodoroAlert | null
+  dismissAlert: () => void
 }
 
 export const PomodoroContext = createContext<PomodoroContextValue | null>(null)
