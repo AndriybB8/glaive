@@ -1,4 +1,5 @@
 import { createContext, useContext } from 'react'
+import type { PomodoroSoundSettings } from './pomodoroSound'
 import type { PomodoroPhase, PomodoroSettings, PomodoroState } from './pomodoroTimer'
 
 /** Klucz w localStorage (jak `SP.token`). Stan timera przetrwa odświeżenie strony i jest wspólny dla kart. */
@@ -23,6 +24,11 @@ export interface PomodoroContextValue {
   skip: () => void
   /** Wraca do 1. sesji pracy. */
   restartCycle: () => void
+  /** Dźwięk na koniec fazy: wybrany dźwięk i głośność (zapamiętane na tym urządzeniu). */
+  soundSettings: PomodoroSoundSettings
+  updateSoundSettings: (change: Partial<PomodoroSoundSettings>) => void
+  /** Odtwarza wybrany dźwięk od razu („Odsłuchaj”). */
+  previewSound: () => void
 }
 
 export const PomodoroContext = createContext<PomodoroContextValue | null>(null)

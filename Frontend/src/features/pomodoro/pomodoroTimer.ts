@@ -126,6 +126,8 @@ export interface AdvanceResult {
   state: PomodoroState
   /** Fazy, które skończyły się od poprzedniego wywołania (w kolejności). Pusta lista = nic się nie zmieniło. */
   endedPhases: PomodoroPhase[]
+  /** Moment końca ostatniej zakończonej fazy (ms od epoki); null, gdy nic się nie skończyło. */
+  lastEndedAt: number | null
 }
 
 /**
@@ -135,15 +137,17 @@ export interface AdvanceResult {
  */
 export function advance(state: PomodoroState, settings: PomodoroSettings, now: number): AdvanceResult {
   const endedPhases: PomodoroPhase[] = []
+  let lastEndedAt: number | null = null
   let current = state
 
   while (current.endsAt !== null && now >= current.endsAt && endedPhases.length < MAX_CATCH_UP_TRANSITIONS) {
     endedPhases.push(current.phase)
+    lastEndedAt = current.endsAt
     const next = nextPhase(current, settings)
     current = { ...next, endsAt: current.endsAt + phaseDurationMs(next.phase, settings), remainingMs: 0 }
   }
 
-  return { state: current, endedPhases }
+  return { state: current, endedPhases, lastEndedAt }
 }
 
 /** „mm:ss”. Zaokrąglamy w górę, żeby przez pierwszą sekundę było widać pełne „25:00”, a „00:00” dopiero na końcu. */

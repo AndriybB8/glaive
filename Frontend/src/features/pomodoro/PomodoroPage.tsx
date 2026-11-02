@@ -1,5 +1,8 @@
+import { useId } from 'react'
 import { Button } from '../../components/ui/Button'
+import { SelectField } from '../../components/ui/SelectField'
 import { usePomodoro } from './pomodoroContext'
+import { POMODORO_SOUNDS, type PomodoroSoundId } from './pomodoroSound'
 import { PHASE_LABELS, currentSessionNumber, formatRemaining, type PomodoroPhase } from './pomodoroTimer'
 
 /** Kolor fazy wzmacnia tylko jej nazwę, która zawsze jest napisana obok. */
@@ -17,8 +20,24 @@ const RING_RADIUS = (RING_SIZE - RING_STROKE) / 2
 const RING_CIRCUMFERENCE = 2 * Math.PI * RING_RADIUS
 
 export function PomodoroPage() {
-  const { state, settings, remainingMs, phaseDurationMs, running, atPhaseStart, nextPhase, start, pause, reset, skip, restartCycle } =
-    usePomodoro()
+  const {
+    state,
+    settings,
+    remainingMs,
+    phaseDurationMs,
+    running,
+    atPhaseStart,
+    nextPhase,
+    start,
+    pause,
+    reset,
+    skip,
+    restartCycle,
+    soundSettings,
+    updateSoundSettings,
+    previewSound,
+  } = usePomodoro()
+  const volumeId = useId()
 
   const styles = phaseStyles[state.phase]
   const fraction = phaseDurationMs > 0 ? remainingMs / phaseDurationMs : 0
@@ -122,6 +141,39 @@ export function PomodoroPage() {
             </Button>
           )}
         </div>
+
+        <section aria-labelledby={`${volumeId}-heading`} className="flex w-full flex-col gap-4 rounded-lg border border-slate-200 p-4">
+          <h2 id={`${volumeId}-heading`} className="text-sm font-semibold text-slate-900">
+            Dźwięk na koniec fazy
+          </h2>
+          <SelectField
+            label="Dźwięk"
+            options={POMODORO_SOUNDS}
+            value={soundSettings.soundId}
+            onChange={(event) => updateSoundSettings({ soundId: event.target.value as PomodoroSoundId })}
+          />
+          <div className="flex flex-col gap-1.5">
+            <div className="flex items-baseline justify-between">
+              <label htmlFor={volumeId} className="text-sm font-medium text-slate-700">
+                Głośność
+              </label>
+              <span className="text-sm text-slate-600 tabular-nums">{soundSettings.volume}%</span>
+            </div>
+            <input
+              id={volumeId}
+              type="range"
+              min={0}
+              max={100}
+              step={5}
+              value={soundSettings.volume}
+              onChange={(event) => updateSoundSettings({ volume: Number(event.target.value) })}
+              className="h-11 w-full accent-blue-600 sm:h-8"
+            />
+          </div>
+          <Button variant="secondary" onClick={previewSound} className="min-h-11 self-start sm:min-h-9">
+            Odsłuchaj
+          </Button>
+        </section>
 
         <div className="w-full rounded-lg bg-slate-50 px-4 py-3 text-sm text-slate-600">
           <p>
