@@ -10,7 +10,7 @@ public class TodoItem
 
     public Guid Id { get; private set; }
 
-    /// <summary>Lista, do której należy punkt. W bazie: klucz obcy do todo_lists (usuwanie kaskadowe).</summary>
+    /// <summary>Lista, do której należy punkt. W bazie: klucz obcy do tabeli list (usuwanie kaskadowe).</summary>
     public Guid ListId { get; private set; }
 
     /// <summary>Właściciel – ten sam co listy. Trzymany osobno, żeby sprawdzać dostęp bez łączenia tabel.</summary>
@@ -68,6 +68,17 @@ public class TodoItem
         Touch(utcNow);
     }
 
+    /// <summary>Edycja punktu (treść i „zrobione” naraz) – jedna zmiana wersji.</summary>
+    public void Update(string title, bool isDone, DateTime utcNow)
+    {
+        EnsureUtc(utcNow);
+        EnsureValid(title);
+
+        Title = title;
+        ApplyDone(isDone, utcNow);
+        Touch(utcNow);
+    }
+
     /// <summary>Zaznacza albo odznacza punkt. Ponowne zaznaczenie zrobionego punktu nie zmienia daty wykonania.</summary>
     public void SetDone(bool isDone, DateTime utcNow)
     {
@@ -78,9 +89,19 @@ public class TodoItem
             return;
         }
 
+        ApplyDone(isDone, utcNow);
+        Touch(utcNow);
+    }
+
+    private void ApplyDone(bool isDone, DateTime utcNow)
+    {
+        if (IsDone == isDone)
+        {
+            return;
+        }
+
         IsDone = isDone;
         CompletedAt = isDone ? utcNow : null;
-        Touch(utcNow);
     }
 
     public void MoveTo(int position, DateTime utcNow)

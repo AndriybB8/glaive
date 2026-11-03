@@ -12,6 +12,7 @@ using StudyPlanner.Application.Notes;
 using StudyPlanner.Application.NoteTasks;
 using StudyPlanner.Application.Schedules;
 using StudyPlanner.Application.Tasks;
+using StudyPlanner.Application.TodoLists;
 using StudyPlanner.Application.Users;
 using StudyPlanner.Infrastructure.NoteGroups;
 using StudyPlanner.Infrastructure.Notes;
@@ -19,6 +20,7 @@ using StudyPlanner.Infrastructure.NoteTasks;
 using StudyPlanner.Infrastructure.Persistence;
 using StudyPlanner.Infrastructure.Schedules;
 using StudyPlanner.Infrastructure.Tasks;
+using StudyPlanner.Infrastructure.TodoLists;
 using StudyPlanner.Infrastructure.Users;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -57,6 +59,10 @@ builder.Services.AddScoped<NoteTaskService>();
 builder.Services.AddScoped<INoteTaskRepository, EfNoteTaskRepository>();
 builder.Services.AddScoped<ScheduleService>();
 builder.Services.AddScoped<IScheduleRepository, EfScheduleRepository>();
+builder.Services.AddScoped<TodoListService>();
+builder.Services.AddScoped<ITodoListRepository, EfTodoListRepository>();
+builder.Services.AddScoped<TodoItemService>();
+builder.Services.AddScoped<ITodoItemRepository, EfTodoItemRepository>();
 builder.Services.AddScoped<TaskService>();
 builder.Services.AddScoped<ITaskRepository, EfTaskRepository>();
 
