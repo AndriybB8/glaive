@@ -5,6 +5,15 @@ import type { PomodoroPhase, PomodoroSettings, PomodoroState } from './pomodoroT
 /** Klucz w localStorage (jak `SP.token`). Stan timera przetrwa odświeżenie strony i jest wspólny dla kart. */
 export const POMODORO_STORAGE_KEY = 'SP.pomodoro'
 
+/**
+ * Ostatnio znane ustawienia użytkownika (kopia z serwera). Dzięki niej po odświeżeniu strony timer od razu
+ * liczy właściwy czas, zanim przyjdzie odpowiedź z API, a inne karty dowiadują się o zmianie ustawień.
+ */
+export const POMODORO_SETTINGS_STORAGE_KEY = 'SP.pomodoroSettings'
+
+/** Stan ustawień z serwera: wczytywanie, wczytane albo błąd (wtedy obowiązuje kopia z przeglądarki lub domyślne). */
+export type PomodoroSettingsStatus = 'loading' | 'ready' | 'error'
+
 /** Komunikat o końcu fazy – pokazywany zawsze, także bez dźwięku. */
 export interface PomodoroAlert {
   endedPhase: PomodoroPhase
@@ -17,7 +26,11 @@ export interface PomodoroAlert {
 
 export interface PomodoroContextValue {
   state: PomodoroState
+  /** Czasy cyklu użytkownika (z serwera, do czasu wczytania – kopia z przeglądarki albo domyślne). */
   settings: PomodoroSettings
+  settingsStatus: PomodoroSettingsStatus
+  /** Zapisuje ustawienia na koncie i od razu stosuje je w timerze. Błąd zapisu rzuca dalej (ApiError). */
+  saveSettings: (settings: PomodoroSettings) => Promise<void>
   remainingMs: number
   /** Pełna długość bieżącej fazy (ms) – do paska postępu. */
   phaseDurationMs: number
@@ -59,6 +72,7 @@ export function usePomodoro(): PomodoroContextValue {
 export function clearStoredPomodoro(): void {
   try {
     localStorage.removeItem(POMODORO_STORAGE_KEY)
+    localStorage.removeItem(POMODORO_SETTINGS_STORAGE_KEY)
   } catch {
     // Zablokowany localStorage (np. tryb prywatny) – nie ma czego czyścić.
   }
