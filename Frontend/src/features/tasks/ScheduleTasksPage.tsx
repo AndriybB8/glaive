@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Alert } from '../../components/ui/Alert'
 import { Badge } from '../../components/ui/Badge'
 import { Button } from '../../components/ui/Button'
@@ -8,9 +8,11 @@ import { ProgressBar } from '../../components/ui/ProgressBar'
 import { ApiError } from '../../lib/http'
 import { countDays, formatDate, formatDateRange, formatDays, todayIso } from '../schedules/scheduleDates'
 import type { Schedule } from '../schedules/types'
+import { getTags } from '../tags/api'
 import { TagChip } from '../tags/TagChip'
 import type { Tag } from '../tags/types'
 import { getTagsForTasks, getTaskTags } from '../taskTags/api'
+import { TaskTagFilter, type TagFilterStatus } from '../taskTags/TaskTagFilter'
 import { changeTaskStatus, getTasks } from './api'
 import { DeleteTaskDialog } from './DeleteTaskDialog'
 import { TaskFormDialog } from './TaskFormDialog'
@@ -110,6 +112,62 @@ export function ScheduleTasksPage({ schedule, onBack }: ScheduleTasksPageProps) 
   const [tagsByTask, setTagsByTask] = useState<Record<string, Tag[]>>({})
   const today = todayIso()
 
+  // Filtr po tagach. Wynik liczy backend (?tagId=…); trzymamy tylko id pasujących zadań,
+  // a pasek postępu dalej pokazuje cały harmonogram.
+  const [allTags, setAllTags] = useState<Tag[]>([])
+  const [filterTagIds, setFilterTagIds] = useState<string[]>([])
+  const [matchingIds, setMatchingIds] = useState<ReadonlySet<string> | null>(null)
+  const [filterStatus, setFilterStatus] = useState<TagFilterStatus>('idle')
+  /** Numer ostatniego zapytania filtru – odpowiedź na starsze (szybkie klikanie) ignorujemy. */
+  const filterRequestRef = useRef(0)
+
+  useEffect(() => {
+    let ignore = false
+    getTags()
+      .then((result) => {
+        if (!ignore) setAllTags(result)
+      })
+      .catch(() => undefined) // Bez tagów po prostu nie pokazujemy filtru.
+    return () => {
+      ignore = true
+    }
+  }, [])
+
+  const runFilter = (tagIds: string[]) => {
+    const requestId = ++filterRequestRef.current
+    if (tagIds.length === 0) {
+      setMatchingIds(null)
+      setFilterStatus('idle')
+      return
+    }
+    setFilterStatus('loading')
+    getTasks(schedule.id, tagIds)
+      .then((result) => {
+        if (requestId !== filterRequestRef.current) return
+        setMatchingIds(new Set(result.map((t) => t.id)))
+        setFilterStatus('idle')
+      })
+      .catch(() => {
+        if (requestId === filterRequestRef.current) setFilterStatus('error')
+      })
+  }
+
+  const toggleFilterTag = (tagId: string) => {
+    const next = filterTagIds.includes(tagId) ? filterTagIds.filter((id) => id !== tagId) : [...filterTagIds, tagId]
+    setFilterTagIds(next)
+    runFilter(next)
+  }
+
+  const clearFilter = () => {
+    setFilterTagIds([])
+    runFilter([])
+  }
+
+  /** Po zmianach w zadaniach (nowe, edycja tagów) wynik filtru może być nieaktualny – pytamy backend jeszcze raz. */
+  const refreshFilter = () => {
+    if (filterTagIds.length > 0) runFilter(filterTagIds)
+  }
+
   const describeLoadError = (error: unknown) => (error instanceof ApiError && error.status === 404 ? SCHEDULE_GONE : LOAD_ERROR)
 
   const loadTasks = useCallback(async () => {
@@ -149,6 +207,7 @@ export function ScheduleTasksPage({ schedule, onBack }: ScheduleTasksPageProps) 
     setTasks((current) => [...(current ?? []).filter((t) => t.id !== saved.id), saved])
     setDialog(null)
     if (tags) setTaskTags(saved.id, tags)
+    refreshFilter()
     if (tagsFailed) {
       setActionError('Zadanie zapisano, ale nie udało się zapisać wszystkich tagów. Spróbuj ponownie w oknie edycji.')
       // Pokazujemy to, co faktycznie jest na serwerze.
@@ -160,6 +219,12 @@ export function ScheduleTasksPage({ schedule, onBack }: ScheduleTasksPageProps) 
 
   const handleDeleted = (id: string) => {
     removeTask(id)
+    setMatchingIds((current) => {
+      if (!current) return current
+      const next = new Set(current)
+      next.delete(id)
+      return next
+    })
     setDialog(null)
   }
 
@@ -184,6 +249,10 @@ export function ScheduleTasksPage({ schedule, onBack }: ScheduleTasksPageProps) 
       }
     }
   }
+
+  const filterActive = filterTagIds.length > 0
+  const visibleTasks = tasks && matchingIds ? tasks.filter((t) => matchingIds.has(t.id)) : tasks
+  const selectedFilterTags = allTags.filter((t) => filterTagIds.includes(t.id))
 
   const doneCount = tasks?.filter((t) => t.status === 'done').length ?? 0
   const totalCount = tasks?.length ?? 0
@@ -236,6 +305,19 @@ export function ScheduleTasksPage({ schedule, onBack }: ScheduleTasksPageProps) 
             <ProgressBar value={doneCount} max={totalCount} label="Postęp harmonogramu" />
           </section>
 
+          {tasks.length > 0 && allTags.length > 0 && (
+            <TaskTagFilter
+              tags={allTags}
+              selectedIds={filterTagIds}
+              onToggle={toggleFilterTag}
+              onClear={clearFilter}
+              status={filterStatus}
+              onRetry={refreshFilter}
+              matchCount={matchingIds ? (visibleTasks?.length ?? 0) : null}
+              totalCount={totalCount}
+            />
+          )}
+
           {actionError && (
             <div className="mt-4">
               <Alert tone="error">{actionError}</Alert>
@@ -244,11 +326,25 @@ export function ScheduleTasksPage({ schedule, onBack }: ScheduleTasksPageProps) 
 
           {tasks.length === 0 ? (
             <p className="mt-6 text-sm text-slate-600">Ten harmonogram nie ma jeszcze zadań. Dodaj pierwsze przyciskiem powyżej.</p>
+          ) : filterActive && visibleTasks?.length === 0 && filterStatus === 'idle' ? (
+            <p className="mt-6 text-sm text-slate-600">
+              {selectedFilterTags.length === 1
+                ? `Żadne zadanie nie ma tagu „${selectedFilterTags[0].name}”.`
+                : 'Żadne zadanie nie ma wszystkich wybranych tagów.'}{' '}
+              <button type="button" onClick={clearFilter} className="font-medium text-blue-700 hover:underline">
+                Wyczyść filtr
+              </button>
+            </p>
           ) : (
-            groupTasks(tasks).map((group) => {
+            groupTasks(visibleTasks ?? []).map((group) => {
               const headingId = `tasks-${group.status}`
               return (
-                <section key={group.status} aria-labelledby={headingId} className="mt-6">
+                <section
+                  key={group.status}
+                  aria-labelledby={headingId}
+                  aria-busy={filterStatus === 'loading'}
+                  className={`mt-6 transition-opacity ${filterStatus === 'loading' ? 'opacity-60' : ''}`}
+                >
                   <h2 id={headingId} className="mb-2 text-sm font-medium text-slate-700">
                     {group.label} <span className="font-normal text-slate-500 tabular-nums">({group.tasks.length})</span>
                   </h2>

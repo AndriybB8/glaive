@@ -6,8 +6,13 @@ export function isTaskConflict(error: unknown): error is ConflictError<Task> {
   return error instanceof ConflictError
 }
 
-export function getTasks(scheduleId: string): Promise<Task[]> {
-  return request(`/api/schedules/${scheduleId}/tasks`)
+/**
+ * Zadania harmonogramu. Z `tagIds` backend zwraca tylko zadania, które mają WSZYSTKIE podane tagi
+ * (parametr `tagId` powtórzony dla każdego tagu: ?tagId=a&tagId=b).
+ */
+export function getTasks(scheduleId: string, tagIds: readonly string[] = []): Promise<Task[]> {
+  const query = new URLSearchParams(tagIds.map((id) => ['tagId', id])).toString()
+  return request(`/api/schedules/${scheduleId}/tasks${query ? `?${query}` : ''}`)
 }
 
 export function createTask(scheduleId: string, draft: TaskDraft): Promise<Task> {

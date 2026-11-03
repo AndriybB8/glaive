@@ -1,5 +1,5 @@
 import type { Tag } from '../tags/types'
-import { readableTextColor } from '../tags/tagColors'
+import { TagToggle } from './TagToggle'
 
 interface TaskTagPickerProps {
   /** Wszystkie tagi użytkownika; null = jeszcze się wczytują. */
@@ -10,10 +10,7 @@ interface TaskTagPickerProps {
   disabled?: boolean
 }
 
-/**
- * Wybór tagów zadania: każdy tag to przełącznik. Wybrany ma tło w swoim kolorze,
- * niewybrany – kropkę w kolorze i obrys, więc stan widać nie tylko po kolorze, ale też po znaczku ✓.
- */
+/** Wybór tagów zadania: każdy tag to przełącznik ({@link TagToggle}). */
 export function TaskTagPicker({ tags, selectedIds, onToggle, loadError, disabled = false }: TaskTagPickerProps) {
   return (
     <fieldset className="flex min-w-0 flex-col gap-1.5">
@@ -35,31 +32,9 @@ export function TaskTagPicker({ tags, selectedIds, onToggle, loadError, disabled
         </p>
       ) : (
         <div className="flex flex-wrap gap-1.5">
-          {tags.map((tag) => {
-            const selected = selectedIds.has(tag.id)
-            return (
-              <button
-                key={tag.id}
-                type="button"
-                aria-pressed={selected}
-                disabled={disabled}
-                onClick={() => onToggle(tag.id)}
-                className={`inline-flex min-h-9 max-w-full items-center gap-1.5 rounded-full border px-3 text-sm font-medium transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 disabled:opacity-60 sm:min-h-7 sm:px-2.5 sm:text-xs ${
-                  selected ? 'border-transparent' : 'border-slate-300 bg-white text-slate-700 hover:bg-slate-50'
-                }`}
-                style={selected ? { backgroundColor: tag.color, color: readableTextColor(tag.color) } : undefined}
-              >
-                {selected ? (
-                  <svg viewBox="0 0 16 16" className="size-3.5 shrink-0" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-                    <path d="m3.5 8.5 3 3 6-7" />
-                  </svg>
-                ) : (
-                  <span aria-hidden className="size-2.5 shrink-0 rounded-full" style={{ backgroundColor: tag.color }} />
-                )}
-                <span className="truncate">{tag.name}</span>
-              </button>
-            )
-          })}
+          {tags.map((tag) => (
+            <TagToggle key={tag.id} tag={tag} pressed={selectedIds.has(tag.id)} onToggle={() => onToggle(tag.id)} disabled={disabled} />
+          ))}
         </div>
       )}
     </fieldset>
