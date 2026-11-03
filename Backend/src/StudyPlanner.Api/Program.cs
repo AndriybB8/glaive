@@ -14,6 +14,7 @@ using StudyPlanner.Application.Pomodoro;
 using StudyPlanner.Application.Schedules;
 using StudyPlanner.Application.Tags;
 using StudyPlanner.Application.Tasks;
+using StudyPlanner.Application.TaskTags;
 using StudyPlanner.Application.TodoLists;
 using StudyPlanner.Application.Users;
 using StudyPlanner.Infrastructure.NoteGroups;
@@ -24,6 +25,7 @@ using StudyPlanner.Infrastructure.Pomodoro;
 using StudyPlanner.Infrastructure.Schedules;
 using StudyPlanner.Infrastructure.Tags;
 using StudyPlanner.Infrastructure.Tasks;
+using StudyPlanner.Infrastructure.TaskTags;
 using StudyPlanner.Infrastructure.TodoLists;
 using StudyPlanner.Infrastructure.Users;
 
@@ -73,6 +75,8 @@ builder.Services.AddScoped<ITagRepository, EfTagRepository>();
 builder.Services.AddScoped<TagService>();
 builder.Services.AddScoped<PomodoroSettingsService>();
 builder.Services.AddScoped<IPomodoroSettingsRepository, EfPomodoroSettingsRepository>();
+builder.Services.AddScoped<TaskTagService>();
+builder.Services.AddScoped<ITaskTagRepository, EfTaskTagRepository>();
 
 builder.Services.AddSingleton<IPasswordHasher, PasswordHasher>();
 builder.Services.AddScoped<ITokenGenerator, JwtTokenGenerator>();
