@@ -8,6 +8,9 @@ import { ProgressBar } from '../../components/ui/ProgressBar'
 import { ApiError } from '../../lib/http'
 import { countDays, formatDate, formatDateRange, formatDays, todayIso } from '../schedules/scheduleDates'
 import type { Schedule } from '../schedules/types'
+import { TagChip } from '../tags/TagChip'
+import type { Tag } from '../tags/types'
+import { getTagsForTasks, getTaskTags } from '../taskTags/api'
 import { changeTaskStatus, getTasks } from './api'
 import { DeleteTaskDialog } from './DeleteTaskDialog'
 import { TaskFormDialog } from './TaskFormDialog'
@@ -21,13 +24,15 @@ type OpenDialog = { kind: 'create' } | { kind: 'edit'; task: Task } | { kind: 'd
 
 interface TaskRowProps {
   task: Task
+  /** Tagi zadania; undefined = jeszcze się wczytują albo nie udało się ich pobrać. */
+  tags: Tag[] | undefined
   today: string
   onStatusChange: (status: TaskStatus) => void
   onEdit: () => void
   onDelete: () => void
 }
 
-function TaskRow({ task, today, onStatusChange, onEdit, onDelete }: TaskRowProps) {
+function TaskRow({ task, tags, today, onStatusChange, onEdit, onDelete }: TaskRowProps) {
   const done = task.status === 'done'
   const priority = priorityBadges[task.priority]
 
@@ -56,6 +61,15 @@ function TaskRow({ task, today, onStatusChange, onEdit, onDelete }: TaskRowProps
           {dueText}
           <Badge tone={priority.tone}>{priority.label}</Badge>
         </div>
+        {tags && tags.length > 0 && (
+          <ul aria-label="Tagi" className="flex max-w-full flex-wrap gap-1 pt-0.5">
+            {tags.map((tag) => (
+              <li key={tag.id} className="max-w-full">
+                <TagChip name={tag.name} color={tag.color} />
+              </li>
+            ))}
+          </ul>
+        )}
       </div>
       <div className="ml-auto flex shrink-0 items-center gap-1 sm:gap-0.5">
         <select
@@ -92,6 +106,8 @@ export function ScheduleTasksPage({ schedule, onBack }: ScheduleTasksPageProps) 
   const [loadError, setLoadError] = useState<string | null>(null)
   const [actionError, setActionError] = useState<string | null>(null)
   const [dialog, setDialog] = useState<OpenDialog>(null)
+  /** Tagi zadań wg id zadania. Wczytywane po zadaniach, więc lista pokazuje się od razu, a tagi dochodzą chwilę później. */
+  const [tagsByTask, setTagsByTask] = useState<Record<string, Tag[]>>({})
   const today = todayIso()
 
   const describeLoadError = (error: unknown) => (error instanceof ApiError && error.status === 404 ? SCHEDULE_GONE : LOAD_ERROR)
@@ -99,7 +115,9 @@ export function ScheduleTasksPage({ schedule, onBack }: ScheduleTasksPageProps) 
   const loadTasks = useCallback(async () => {
     try {
       setLoadError(null)
-      setTasks(await getTasks(schedule.id))
+      const loaded = await getTasks(schedule.id)
+      setTasks(loaded)
+      setTagsByTask(await getTagsForTasks(loaded.map((t) => t.id)))
     } catch (error) {
       setLoadError(describeLoadError(error))
     }
@@ -108,8 +126,11 @@ export function ScheduleTasksPage({ schedule, onBack }: ScheduleTasksPageProps) 
   useEffect(() => {
     let ignore = false
     getTasks(schedule.id)
-      .then((result) => {
-        if (!ignore) setTasks(result)
+      .then(async (result) => {
+        if (ignore) return
+        setTasks(result)
+        const tags = await getTagsForTasks(result.map((t) => t.id))
+        if (!ignore) setTagsByTask(tags)
       })
       .catch((error: unknown) => {
         if (!ignore) setLoadError(describeLoadError(error))
@@ -122,9 +143,19 @@ export function ScheduleTasksPage({ schedule, onBack }: ScheduleTasksPageProps) 
   const replaceTask = (updated: Task) => setTasks((current) => current?.map((t) => (t.id === updated.id ? updated : t)) ?? current)
   const removeTask = (id: string) => setTasks((current) => current?.filter((t) => t.id !== id) ?? current)
 
-  const handleSaved = (saved: Task) => {
+  const setTaskTags = (taskId: string, tags: Tag[]) => setTagsByTask((current) => ({ ...current, [taskId]: tags }))
+
+  const handleSaved = (saved: Task, tags: Tag[] | null, tagsFailed = false) => {
     setTasks((current) => [...(current ?? []).filter((t) => t.id !== saved.id), saved])
     setDialog(null)
+    if (tags) setTaskTags(saved.id, tags)
+    if (tagsFailed) {
+      setActionError('Zadanie zapisano, ale nie udało się zapisać wszystkich tagów. Spróbuj ponownie w oknie edycji.')
+      // Pokazujemy to, co faktycznie jest na serwerze.
+      getTaskTags(saved.id)
+        .then((current) => setTaskTags(saved.id, current))
+        .catch(() => undefined)
+    }
   }
 
   const handleDeleted = (id: string) => {
@@ -226,6 +257,7 @@ export function ScheduleTasksPage({ schedule, onBack }: ScheduleTasksPageProps) 
                       <TaskRow
                         key={task.id}
                         task={task}
+                        tags={tagsByTask[task.id]}
                         today={today}
                         onStatusChange={(status) => void handleStatusChange(task, status)}
                         onEdit={() => setDialog({ kind: 'edit', task })}

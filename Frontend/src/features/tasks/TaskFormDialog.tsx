@@ -1,4 +1,4 @@
-import { useState, type ChangeEvent, type SubmitEvent } from 'react'
+import { useEffect, useState, type ChangeEvent, type SubmitEvent } from 'react'
 import { Alert } from '../../components/ui/Alert'
 import { Button } from '../../components/ui/Button'
 import { Dialog } from '../../components/ui/Dialog'
@@ -9,6 +9,10 @@ import { ApiError } from '../../lib/http'
 import { TaskNotesSection } from '../noteTasks/TaskNotesSection'
 import { formatDate } from '../schedules/scheduleDates'
 import type { Schedule } from '../schedules/types'
+import { getTags } from '../tags/api'
+import type { Tag } from '../tags/types'
+import { getTaskTags, syncTaskTags } from '../taskTags/api'
+import { TaskTagPicker } from '../taskTags/TaskTagPicker'
 import { createTask, isTaskConflict, updateTask } from './api'
 import { priorityOptions, statusOptions } from './taskMeta'
 import type { Task, TaskDraft, TaskPriority, TaskStatus } from './types'
@@ -44,7 +48,11 @@ interface TaskFormDialogProps {
   /** Brak = dodawanie nowego zadania. */
   task?: Task
   onClose: () => void
-  onSaved: (task: Task) => void
+  /**
+   * Zadanie zapisane. `tags`: aktualne tagi zadania; null = tagi się nie zmieniły (np. nie udało się ich wczytać).
+   * `tagsFailed`: zadanie zapisano, ale tagów nie – lista powinna pobrać je od nowa i pokazać błąd.
+   */
+  onSaved: (task: Task, tags: Tag[] | null, tagsFailed?: boolean) => void
   /** Serwer zgłosił, że zadanie zmieniono lub usunięto w innym miejscu – lista powinna to odzwierciedlić. */
   onChangedElsewhere: (current: Task | { deletedId: string }) => void
 }
@@ -60,6 +68,53 @@ export function TaskFormDialog({ schedule, task, onClose, onSaved, onChangedElse
   const [saveError, setSaveError] = useState<string | null>(null)
   const [conflict, setConflict] = useState<Task | null>(null)
 
+  // Tagi: wszystkie tagi użytkownika, tagi zadania przy otwarciu okna i bieżący wybór.
+  const [allTags, setAllTags] = useState<Tag[] | null>(null)
+  const [initialTagIds, setInitialTagIds] = useState<string[] | null>(task ? null : [])
+  const [selectedTagIds, setSelectedTagIds] = useState<ReadonlySet<string>>(new Set())
+  const [tagsLoadError, setTagsLoadError] = useState(false)
+
+  useEffect(() => {
+    let ignore = false
+    Promise.all([getTags(), task ? getTaskTags(task.id) : Promise.resolve([])])
+      .then(([tags, current]) => {
+        if (ignore) return
+        const ids = current.map((t) => t.id)
+        setAllTags(tags)
+        setInitialTagIds(ids)
+        setSelectedTagIds(new Set(ids))
+      })
+      .catch(() => {
+        if (!ignore) setTagsLoadError(true)
+      })
+    return () => {
+      ignore = true
+    }
+  }, [task])
+
+  const toggleTag = (tagId: string) =>
+    setSelectedTagIds((current) => {
+      const next = new Set(current)
+      if (next.has(tagId)) next.delete(tagId)
+      else next.add(tagId)
+      return next
+    })
+
+  /** Po zapisie zadania: zapis tagów. Tagi mają osobne API, więc to drugi krok (dla nowego zadania znamy już jego id). */
+  const saveTags = async (saved: Task) => {
+    if (allTags === null || initialTagIds === null) {
+      onSaved(saved, null)
+      return
+    }
+    const selected = [...selectedTagIds]
+    try {
+      await syncTaskTags(saved.id, initialTagIds, selected)
+      onSaved(saved, allTags.filter((t) => selectedTagIds.has(t.id)))
+    } catch {
+      onSaved(saved, null, true)
+    }
+  }
+
   const errors = showErrors ? validate(draft, schedule) : {}
   const rangeHint = `Opcjonalnie, od ${formatDate(schedule.startDate)} do ${formatDate(schedule.endDate)}.`
 
@@ -73,7 +128,7 @@ export function TaskFormDialog({ schedule, task, onClose, onSaved, onChangedElse
     setConflict(null)
     try {
       const saved = task ? await updateTask(task.id, draft, versionToSend) : await createTask(schedule.id, draft)
-      onSaved(saved)
+      await saveTags(saved)
     } catch (error) {
       if (isTaskConflict(error)) {
         setConflict(error.current)
@@ -171,6 +226,14 @@ export function TaskFormDialog({ schedule, task, onClose, onSaved, onChangedElse
           onChange={(event) => change('status', event.target.value as TaskStatus)}
         />
       </div>
+
+      <TaskTagPicker
+        tags={allTags}
+        selectedIds={selectedTagIds}
+        onToggle={toggleTag}
+        loadError={tagsLoadError}
+        disabled={saving}
+      />
 
       {/* Szczegóły istniejącego zadania: podgląd przypisanych notatek. */}
       {task && <TaskNotesSection taskId={task.id} />}
