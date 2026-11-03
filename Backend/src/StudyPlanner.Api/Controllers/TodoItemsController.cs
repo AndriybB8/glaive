@@ -48,6 +48,17 @@ public sealed class TodoItemsController(TodoItemService todoItemService) : Contr
         return result.IsSuccess ? Ok(result.Value) : ToErrorResponse(result.Error!);
     }
 
+    /// <summary>
+    /// Nowa kolejność punktów listy (przeciąganie). Body: <c>{ "itemIds": [...] }</c> – wszystkie punkty listy, od góry.
+    /// 409, gdy lista zmieniła się w międzyczasie (punkt dodany lub usunięty w innej karcie).
+    /// </summary>
+    [HttpPut("api/todo-lists/{listId:guid}/items/order")]
+    public async Task<ActionResult<IReadOnlyList<TodoItemDto>>> Reorder(Guid listId, ReorderTodoItemsRequest request, CancellationToken cancellationToken)
+    {
+        var result = await todoItemService.ReorderAsync(listId, request, cancellationToken);
+        return result.IsSuccess ? Ok(result.Value) : ToErrorResponse(result.Error!);
+    }
+
     [HttpDelete("api/todo-items/{id:guid}")]
     public async Task<IActionResult> Delete(Guid id, CancellationToken cancellationToken)
     {
