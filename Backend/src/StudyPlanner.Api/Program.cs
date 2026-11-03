@@ -11,6 +11,7 @@ using StudyPlanner.Application.NoteGroups;
 using StudyPlanner.Application.Notes;
 using StudyPlanner.Application.NoteTasks;
 using StudyPlanner.Application.Schedules;
+using StudyPlanner.Application.Tags;
 using StudyPlanner.Application.Tasks;
 using StudyPlanner.Application.Users;
 using StudyPlanner.Infrastructure.NoteGroups;
@@ -18,6 +19,7 @@ using StudyPlanner.Infrastructure.Notes;
 using StudyPlanner.Infrastructure.NoteTasks;
 using StudyPlanner.Infrastructure.Persistence;
 using StudyPlanner.Infrastructure.Schedules;
+using StudyPlanner.Infrastructure.Tags;
 using StudyPlanner.Infrastructure.Tasks;
 using StudyPlanner.Infrastructure.Users;
 
@@ -59,6 +61,8 @@ builder.Services.AddScoped<ScheduleService>();
 builder.Services.AddScoped<IScheduleRepository, EfScheduleRepository>();
 builder.Services.AddScoped<TaskService>();
 builder.Services.AddScoped<ITaskRepository, EfTaskRepository>();
+builder.Services.AddScoped<ITagRepository, EfTagRepository>();
+builder.Services.AddScoped<TagService>();
 
 builder.Services.AddSingleton<IPasswordHasher, PasswordHasher>();
 builder.Services.AddScoped<ITokenGenerator, JwtTokenGenerator>();
