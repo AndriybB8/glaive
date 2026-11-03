@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { NavTabs } from './components/ui/NavTabs'
 import { NotesPage } from './features/notes/NotesPage'
 import { SchedulesPage } from './features/schedules/SchedulesPage'
+import { TagsPage } from './features/tags/TagsPage'
 import {RegisterPage} from "./features/auth/RegisterPage.tsx";
 import {LoginPage} from './features/auth/LoginPage'
 import { getToken, clearToken } from './lib/authToken'
@@ -17,6 +18,7 @@ const pages = [
   { id: 'notatki', label: 'Notatki' },
   { id: 'harmonogramy', label: 'Harmonogramy' },
   { id: 'pomodoro', label: 'Pomodoro' },
+  { id: 'tagi', label: 'Tagi' },
 ] as const
 
 type PageId = (typeof pages)[number]['id']
@@ -69,7 +71,15 @@ function App() {
           }
         />
         <div className="min-h-0 flex-1">
-          {page === 'harmonogramy' ? <SchedulesPage /> : page === 'pomodoro' ? <PomodoroPage /> : <NotesPage />}
+          {page === 'harmonogramy' ? (
+            <SchedulesPage />
+          ) : page === 'pomodoro' ? (
+            <PomodoroPage />
+          ) : page === 'tagi' ? (
+            <TagsPage />
+          ) : (
+            <NotesPage />
+          )}
         </div>
       </div>
       <PomodoroAlertToast />
