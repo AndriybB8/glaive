@@ -6,6 +6,7 @@ using StudyPlanner.Domain.Pomodoro;
 using StudyPlanner.Domain.Schedules;
 using StudyPlanner.Domain.Tags;
 using StudyPlanner.Domain.Tasks;
+using StudyPlanner.Domain.TaskTags;
 using StudyPlanner.Domain.TodoLists;
 using StudyPlanner.Domain.Users;
 
@@ -35,6 +36,8 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
     public DbSet<TodoList> TodoLists => Set<TodoList>();
 
     public DbSet<TodoItem> TodoItems => Set<TodoItem>();
+
+    public DbSet<TaskTag> TaskTags => Set<TaskTag>();
 
     /// <summary>Ustawienia timera Pomodoro – jeden wiersz na użytkownika.</summary>
     public DbSet<PomodoroSettings> PomodoroSettings => Set<PomodoroSettings>();
