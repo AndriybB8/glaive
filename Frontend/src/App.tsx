@@ -3,6 +3,7 @@ import { NavTabs } from './components/ui/NavTabs'
 import { NotesPage } from './features/notes/NotesPage'
 import { SchedulesPage } from './features/schedules/SchedulesPage'
 import { TagsPage } from './features/tags/TagsPage'
+import { TodoListsPage } from './features/todo/TodoListsPage'
 import {RegisterPage} from "./features/auth/RegisterPage.tsx";
 import {LoginPage} from './features/auth/LoginPage'
 import { getToken, clearToken } from './lib/authToken'
@@ -17,6 +18,7 @@ import { clearStoredPomodoro } from './features/pomodoro/pomodoroContext'
 const pages = [
   { id: 'notatki', label: 'Notatki' },
   { id: 'harmonogramy', label: 'Harmonogramy' },
+  { id: 'listy', label: 'Listy' },
   { id: 'pomodoro', label: 'Pomodoro' },
   { id: 'tagi', label: 'Tagi' },
 ] as const
@@ -77,6 +79,8 @@ function App() {
             <PomodoroPage />
           ) : page === 'tagi' ? (
             <TagsPage />
+          ) : page === 'listy' ? (
+            <TodoListsPage />
           ) : (
             <NotesPage />
           )}
