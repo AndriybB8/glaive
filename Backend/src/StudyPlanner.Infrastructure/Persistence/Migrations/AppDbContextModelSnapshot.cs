@@ -134,6 +134,51 @@ namespace StudyPlanner.Infrastructure.Persistence.Migrations
                     b.ToTable("notes", (string)null);
                 });
 
+            modelBuilder.Entity("StudyPlanner.Domain.Pomodoro.PomodoroSettings", b =>
+                {
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("user_id");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<int>("LongBreakMinutes")
+                        .HasColumnType("integer")
+                        .HasColumnName("long_break_minutes");
+
+                    b.Property<int>("SessionsBeforeLongBreak")
+                        .HasColumnType("integer")
+                        .HasColumnName("sessions_before_long_break");
+
+                    b.Property<int>("ShortBreakMinutes")
+                        .HasColumnType("integer")
+                        .HasColumnName("short_break_minutes");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<int>("WorkMinutes")
+                        .HasColumnType("integer")
+                        .HasColumnName("work_minutes");
+
+                    b.HasKey("UserId")
+                        .HasName("pk_pomodoro_settings");
+
+                    b.ToTable("pomodoro_settings", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_pomodoro_settings_long_break_minutes", "long_break_minutes BETWEEN 1 AND 60");
+
+                            t.HasCheckConstraint("ck_pomodoro_settings_sessions_before_long_break", "sessions_before_long_break BETWEEN 1 AND 10");
+
+                            t.HasCheckConstraint("ck_pomodoro_settings_short_break_minutes", "short_break_minutes BETWEEN 1 AND 30");
+
+                            t.HasCheckConstraint("ck_pomodoro_settings_work_minutes", "work_minutes BETWEEN 1 AND 120");
+                        });
+                });
+
             modelBuilder.Entity("StudyPlanner.Domain.Schedules.Schedule", b =>
                 {
                     b.Property<Guid>("Id")
@@ -482,6 +527,16 @@ namespace StudyPlanner.Infrastructure.Persistence.Migrations
                         .HasForeignKey("GroupId")
                         .OnDelete(DeleteBehavior.SetNull)
                         .HasConstraintName("fk_notes_note_groups_group_id");
+                });
+
+            modelBuilder.Entity("StudyPlanner.Domain.Pomodoro.PomodoroSettings", b =>
+                {
+                    b.HasOne("StudyPlanner.Domain.Users.User", null)
+                        .WithOne()
+                        .HasForeignKey("StudyPlanner.Domain.Pomodoro.PomodoroSettings", "UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_pomodoro_settings_users_user_id");
                 });
 
             modelBuilder.Entity("StudyPlanner.Domain.Schedules.Schedule", b =>
