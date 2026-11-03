@@ -28,3 +28,9 @@ public sealed record UpdateTodoItemRequest(string? Title, bool? IsDone, int Vers
 
 /// <summary>Zaznaczenie / odznaczenie z listy – bez kontroli wersji (wygrywa ostatnia zmiana).</summary>
 public sealed record SetTodoItemDoneRequest(bool? IsDone);
+
+/// <summary>
+/// Nowa kolejność punktów listy (przeciąganie na liście): identyfikatory wszystkich punktów listy,
+/// każdy dokładnie raz, w kolejności od góry.
+/// </summary>
+public sealed record ReorderTodoItemsRequest(IReadOnlyList<Guid>? ItemIds);

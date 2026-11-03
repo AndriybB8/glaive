@@ -15,6 +15,14 @@ public sealed class EfTodoItemRepository(AppDbContext db) : ITodoItemRepository
             .ToListAsync(cancellationToken);
     }
 
+    public async Task<IReadOnlyList<TodoItem>> GetByListForUpdateAsync(Guid listId, Guid userId, CancellationToken cancellationToken)
+    {
+        // Śledzone przez kontekst – TodoItemService zmienia pozycje i zapisuje je przez UpdateRangeAsync.
+        return await db.TodoItems
+            .Where(i => i.ListId == listId && i.UserId == userId)
+            .ToListAsync(cancellationToken);
+    }
+
     public Task<TodoItem?> GetByIdAsync(Guid id, Guid userId, CancellationToken cancellationToken)
     {
         // Śledzony przez kontekst – TodoItemService zmienia go i zapisuje przez UpdateAsync.
@@ -36,6 +44,21 @@ public sealed class EfTodoItemRepository(AppDbContext db) : ITodoItemRepository
         catch (DbUpdateConcurrencyException)
         {
             // Zapominamy nieaktualne dane, żeby kolejny odczyt pobrał wersję z bazy (pokazywaną przy konflikcie).
+            db.ChangeTracker.Clear();
+            throw new TodoItemConcurrencyException();
+        }
+    }
+
+    public async Task UpdateRangeAsync(IReadOnlyList<TodoItem> items, CancellationToken cancellationToken)
+    {
+        // Punkty są śledzone (GetByListForUpdateAsync), więc wystarczy jeden zapis. SaveChanges wysyła wszystkie
+        // UPDATE … WHERE version = … w jednej transakcji: konflikt na jednym punkcie wycofuje całą zmianę kolejności.
+        try
+        {
+            await db.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateConcurrencyException)
+        {
             db.ChangeTracker.Clear();
             throw new TodoItemConcurrencyException();
         }

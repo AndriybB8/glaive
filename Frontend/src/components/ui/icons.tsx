@@ -72,3 +72,44 @@ export function TrayIcon() {
     </Icon>
   )
 }
+
+/** Uchwyt do przeciągania (sześć kropek). */
+export function GripIcon() {
+  return (
+    <Icon>
+      <circle cx="7.5" cy="5" r="0.9" fill="currentColor" />
+      <circle cx="12.5" cy="5" r="0.9" fill="currentColor" />
+      <circle cx="7.5" cy="10" r="0.9" fill="currentColor" />
+      <circle cx="12.5" cy="10" r="0.9" fill="currentColor" />
+      <circle cx="7.5" cy="15" r="0.9" fill="currentColor" />
+      <circle cx="12.5" cy="15" r="0.9" fill="currentColor" />
+    </Icon>
+  )
+}
+
+export function ChevronUpIcon() {
+  return (
+    <Icon>
+      <path d="m5.5 12.5 4.5-4.5 4.5 4.5" />
+    </Icon>
+  )
+}
+
+export function ChevronDownIcon() {
+  return (
+    <Icon>
+      <path d="m5.5 7.5 4.5 4.5 4.5-4.5" />
+    </Icon>
+  )
+}
+
+/** Lista z punktami do odhaczenia. */
+export function ChecklistIcon() {
+  return (
+    <Icon>
+      <path d="m3.5 5.5 1.3 1.3 2.2-2.6" />
+      <path d="m3.5 12.5 1.3 1.3 2.2-2.6" />
+      <path d="M9.5 6h7M9.5 13h7" />
+    </Icon>
+  )
+}

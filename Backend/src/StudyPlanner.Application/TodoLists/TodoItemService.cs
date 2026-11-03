@@ -11,6 +11,8 @@ public sealed class TodoItemService(
 {
     private static readonly TodoItemError ItemNotFound = new(TodoItemErrorType.NotFound, "Nie znaleziono punktu listy.");
     private static readonly TodoItemError ListNotFound = new(TodoItemErrorType.NotFound, "Nie znaleziono listy.");
+    private static readonly TodoItemError OrderOutdated =
+        new(TodoItemErrorType.Conflict, "Lista została w międzyczasie zmieniona w innym miejscu. Odśwież ją i ustaw kolejność ponownie.");
 
     /// <summary>Punkty listy w kolejności na liście (przy równej pozycji – starsze pierwsze).</summary>
     public async Task<TodoItemResult<IReadOnlyList<TodoItemDto>>> GetByListAsync(Guid listId, CancellationToken cancellationToken)
@@ -117,6 +119,69 @@ public sealed class TodoItemService(
 
         item.SetDone(isDone, UtcNow());
         return await SaveAsync(item, cancellationToken);
+    }
+
+    /// <summary>
+    /// Nowa kolejność punktów listy (przeciąganie). <see cref="ReorderTodoItemsRequest.ItemIds"/> to wszystkie punkty listy,
+    /// każdy raz, od góry. Pozycja i wersja zmieniają się tylko punktom, które faktycznie przesunięto.
+    /// Zwraca punkty listy w nowej kolejności.
+    /// </summary>
+    public async Task<TodoItemResult<IReadOnlyList<TodoItemDto>>> ReorderAsync(
+        Guid listId,
+        ReorderTodoItemsRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (!await lists.ExistsAsync(listId, currentUser.UserId, cancellationToken))
+        {
+            return TodoItemResult<IReadOnlyList<TodoItemDto>>.Failure(ListNotFound);
+        }
+
+        var ids = request.ItemIds;
+        if (ids is null)
+        {
+            return TodoItemResult<IReadOnlyList<TodoItemDto>>.Failure(Invalid("Podaj kolejność punktów."));
+        }
+
+        if (ids.Distinct().Count() != ids.Count)
+        {
+            return TodoItemResult<IReadOnlyList<TodoItemDto>>.Failure(Invalid("Każdy punkt może wystąpić w kolejności tylko raz."));
+        }
+
+        var found = await items.GetByListForUpdateAsync(listId, currentUser.UserId, cancellationToken);
+        var byId = found.ToDictionary(i => i.Id);
+
+        // Brakujący albo nieznany punkt: lista zmieniła się w innym miejscu (np. punkt dodany w drugiej karcie).
+        if (ids.Count != found.Count || !ids.All(byId.ContainsKey))
+        {
+            return TodoItemResult<IReadOnlyList<TodoItemDto>>.Failure(OrderOutdated);
+        }
+
+        var now = UtcNow();
+        var moved = new List<TodoItem>();
+        for (var position = 0; position < ids.Count; position++)
+        {
+            var item = byId[ids[position]];
+            if (item.Position != position)
+            {
+                item.MoveTo(position, now);
+                moved.Add(item);
+            }
+        }
+
+        if (moved.Count > 0)
+        {
+            try
+            {
+                await items.UpdateRangeAsync(moved, cancellationToken);
+            }
+            catch (TodoItemConcurrencyException)
+            {
+                return TodoItemResult<IReadOnlyList<TodoItemDto>>.Failure(OrderOutdated);
+            }
+        }
+
+        IReadOnlyList<TodoItemDto> result = ids.Select(id => TodoItemDto.From(byId[id])).ToList();
+        return TodoItemResult<IReadOnlyList<TodoItemDto>>.Success(result);
     }
 
     public async Task<TodoItemResult<bool>> DeleteAsync(Guid id, CancellationToken cancellationToken)

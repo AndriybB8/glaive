@@ -230,6 +230,116 @@ public class TodoItemServiceTests
         Assert.Empty(_items.Items);
     }
 
+    [Fact]
+    public async Task Reorder_SetsPositionsByOrderAndReturnsItemsInNewOrder()
+    {
+        var a = await CreateAsync("A");
+        var b = await CreateAsync("B");
+        var c = await CreateAsync("C");
+
+        var result = await _service.ReorderAsync(_list.Id, new ReorderTodoItemsRequest([c.Id, a.Id, b.Id]), CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(["C", "A", "B"], result.Value!.Select(i => i.Title));
+        Assert.Equal([0, 1, 2], result.Value!.Select(i => i.Position));
+        var list = (await _service.GetByListAsync(_list.Id, CancellationToken.None)).Value!;
+        Assert.Equal(["C", "A", "B"], list.Select(i => i.Title));
+    }
+
+    [Fact]
+    public async Task Reorder_ChangesVersionOnlyOfMovedItems()
+    {
+        var a = await CreateAsync("A");
+        var b = await CreateAsync("B");
+        var c = await CreateAsync("C");
+        _time.Advance(TimeSpan.FromMinutes(1));
+
+        // Zamiana B i C – A zostaje na miejscu.
+        var result = await _service.ReorderAsync(_list.Id, new ReorderTodoItemsRequest([a.Id, c.Id, b.Id]), CancellationToken.None);
+
+        var byTitle = result.Value!.ToDictionary(i => i.Title);
+        Assert.Equal(1, byTitle["A"].Version);
+        Assert.Equal(a.UpdatedAt, byTitle["A"].UpdatedAt);
+        Assert.Equal(2, byTitle["B"].Version);
+        Assert.Equal(2, byTitle["C"].Version);
+        Assert.True(byTitle["C"].UpdatedAt > c.UpdatedAt);
+    }
+
+    [Fact]
+    public async Task Reorder_InSameOrder_ChangesNothing()
+    {
+        var a = await CreateAsync("A");
+        var b = await CreateAsync("B");
+
+        var result = await _service.ReorderAsync(_list.Id, new ReorderTodoItemsRequest([a.Id, b.Id]), CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        Assert.All(result.Value!, i => Assert.Equal(1, i.Version));
+        Assert.Equal(0, _items.RangeUpdates);
+    }
+
+    [Fact]
+    public async Task Reorder_WithMissingItem_IsConflict()
+    {
+        var a = await CreateAsync("A");
+        await CreateAsync("B");
+
+        var result = await _service.ReorderAsync(_list.Id, new ReorderTodoItemsRequest([a.Id]), CancellationToken.None);
+
+        Assert.Equal(TodoItemErrorType.Conflict, result.Error!.Type);
+        Assert.All(_items.Items, i => Assert.Equal(1, i.Version));
+    }
+
+    [Fact]
+    public async Task Reorder_WithItemFromAnotherList_IsConflict()
+    {
+        var a = await CreateAsync("A");
+        var otherList = TodoList.Create(UserId, "Inna", DateTime.UtcNow);
+        _lists.Lists.Add(otherList);
+        var foreign = (await _service.CreateAsync(otherList.Id, new CreateTodoItemRequest("Z innej listy"), CancellationToken.None)).Value!;
+
+        var result = await _service.ReorderAsync(_list.Id, new ReorderTodoItemsRequest([foreign.Id, a.Id]), CancellationToken.None);
+
+        Assert.Equal(TodoItemErrorType.Conflict, result.Error!.Type);
+        Assert.Equal(0, _items.Items.Single(i => i.Id == foreign.Id).Position);
+    }
+
+    [Fact]
+    public async Task Reorder_WithDuplicateOrMissingIds_IsValidation()
+    {
+        var a = await CreateAsync("A");
+        await CreateAsync("B");
+
+        var duplicate = await _service.ReorderAsync(_list.Id, new ReorderTodoItemsRequest([a.Id, a.Id]), CancellationToken.None);
+        var missing = await _service.ReorderAsync(_list.Id, new ReorderTodoItemsRequest(null), CancellationToken.None);
+
+        Assert.Equal(TodoItemErrorType.Validation, duplicate.Error!.Type);
+        Assert.Equal(TodoItemErrorType.Validation, missing.Error!.Type);
+    }
+
+    [Fact]
+    public async Task Reorder_ListOfAnotherUser_IsNotFound()
+    {
+        var foreignList = TodoList.Create(Guid.NewGuid(), "Cudza", DateTime.UtcNow);
+        _lists.Lists.Add(foreignList);
+
+        var result = await _service.ReorderAsync(foreignList.Id, new ReorderTodoItemsRequest([]), CancellationToken.None);
+
+        Assert.Equal(TodoItemErrorType.NotFound, result.Error!.Type);
+    }
+
+    [Fact]
+    public async Task Reorder_WhenSaveConflicts_IsConflict()
+    {
+        var a = await CreateAsync("A");
+        var b = await CreateAsync("B");
+        _items.FailNextRangeUpdate = true;
+
+        var result = await _service.ReorderAsync(_list.Id, new ReorderTodoItemsRequest([b.Id, a.Id]), CancellationToken.None);
+
+        Assert.Equal(TodoItemErrorType.Conflict, result.Error!.Type);
+    }
+
     private sealed class TestUser(Guid userId) : ICurrentUser
     {
         public Guid UserId => userId;
@@ -253,6 +363,27 @@ public class TodoItemServiceTests
 
         public Task<TodoItem?> GetByIdAsync(Guid id, Guid userId, CancellationToken cancellationToken) =>
             Task.FromResult(Items.FirstOrDefault(i => i.Id == id && i.UserId == userId));
+
+        public Task<IReadOnlyList<TodoItem>> GetByListForUpdateAsync(Guid listId, Guid userId, CancellationToken cancellationToken) =>
+            GetByListAsync(listId, userId, cancellationToken);
+
+        /// <summary>Ile razy zapisano kilka punktów naraz.</summary>
+        public int RangeUpdates { get; private set; }
+
+        /// <summary>Następny zapis kilku punktów zgłosi konflikt wersji (jak przy zmianie w innej karcie).</summary>
+        public bool FailNextRangeUpdate { get; set; }
+
+        public Task UpdateRangeAsync(IReadOnlyList<TodoItem> items, CancellationToken cancellationToken)
+        {
+            if (FailNextRangeUpdate)
+            {
+                FailNextRangeUpdate = false;
+                throw new TodoItemConcurrencyException();
+            }
+
+            RangeUpdates++;
+            return Task.CompletedTask;
+        }
 
         public Task AddAsync(TodoItem item, CancellationToken cancellationToken)
         {
