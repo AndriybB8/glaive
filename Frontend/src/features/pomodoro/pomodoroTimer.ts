@@ -8,7 +8,7 @@
 
 export type PomodoroPhase = 'work' | 'shortBreak' | 'longBreak'
 
-/** Czasy cyklu. Na razie stałe ({@link DEFAULT_POMODORO_SETTINGS}); zapis własnych ustawień to SCRUM-43. */
+/** Czasy cyklu. Zapisane na koncie użytkownika (SCRUM-43); dopóki nic nie zapisze – {@link DEFAULT_POMODORO_SETTINGS}. */
 export interface PomodoroSettings {
   workMinutes: number
   shortBreakMinutes: number
@@ -22,6 +22,41 @@ export const DEFAULT_POMODORO_SETTINGS: PomodoroSettings = {
   shortBreakMinutes: 5,
   longBreakMinutes: 15,
   sessionsBeforeLongBreak: 4,
+}
+
+/** Dozwolone zakresy – te same sprawdza backend (PomodoroSettings w warstwie Domain). */
+export const POMODORO_LIMITS: Record<keyof PomodoroSettings, { min: number; max: number }> = {
+  workMinutes: { min: 1, max: 120 },
+  shortBreakMinutes: { min: 1, max: 30 },
+  longBreakMinutes: { min: 1, max: 60 },
+  sessionsBeforeLongBreak: { min: 1, max: 10 },
+}
+
+export function sameSettings(a: PomodoroSettings, b: PomodoroSettings): boolean {
+  return (
+    a.workMinutes === b.workMinutes &&
+    a.shortBreakMinutes === b.shortBreakMinutes &&
+    a.longBreakMinutes === b.longBreakMinutes &&
+    a.sessionsBeforeLongBreak === b.sessionsBeforeLongBreak
+  )
+}
+
+/** Ustawienia odczytane z przeglądarki – sprawdzone jak stan timera. Zwraca null, gdy coś się nie zgadza. */
+export function parseSettings(value: unknown): PomodoroSettings | null {
+  if (typeof value !== 'object' || value === null) return null
+  const v = value as Record<string, unknown>
+  const keys = Object.keys(POMODORO_LIMITS) as (keyof PomodoroSettings)[]
+  const valid = keys.every((key) => {
+    const n = v[key]
+    return Number.isInteger(n) && (n as number) >= POMODORO_LIMITS[key].min && (n as number) <= POMODORO_LIMITS[key].max
+  })
+  if (!valid) return null
+  return {
+    workMinutes: v.workMinutes as number,
+    shortBreakMinutes: v.shortBreakMinutes as number,
+    longBreakMinutes: v.longBreakMinutes as number,
+    sessionsBeforeLongBreak: v.sessionsBeforeLongBreak as number,
+  }
 }
 
 export interface PomodoroState {
@@ -120,6 +155,26 @@ export function skip(state: PomodoroState, settings: PomodoroSettings, now: numb
   return state.endsAt === null
     ? { ...next, endsAt: null, remainingMs: duration }
     : { ...next, endsAt: now + duration, remainingMs: 0 }
+}
+
+/**
+ * Nowe ustawienia w trakcie cyklu. Czas, który już upłynął w bieżącej fazie, się liczy:
+ * po 10 minutach pracy zmiana z 25 na 30 minut zostawia 20 minut, a zmiana na 8 minut kończy fazę od razu.
+ * Faza i postęp w cyklu zostają; licznik sesji jest przycinany do nowej liczby sesji w cyklu.
+ */
+export function applySettings(
+  state: PomodoroState,
+  previous: PomodoroSettings,
+  next: PomodoroSettings,
+  now: number,
+): PomodoroState {
+  const elapsed = Math.max(0, phaseDurationMs(state.phase, previous) - getRemainingMs(state, now))
+  const remaining = Math.max(0, phaseDurationMs(state.phase, next) - elapsed)
+  const completedWorkSessions = Math.min(state.completedWorkSessions, next.sessionsBeforeLongBreak)
+
+  return state.endsAt === null
+    ? { ...state, completedWorkSessions, remainingMs: remaining }
+    : { ...state, completedWorkSessions, endsAt: now + remaining, remainingMs: 0 }
 }
 
 export interface AdvanceResult {

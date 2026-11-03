@@ -1,5 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import { POMODORO_STORAGE_KEY, PomodoroContext, type PomodoroAlert, type PomodoroContextValue } from './pomodoroContext'
+import {
+  POMODORO_SETTINGS_STORAGE_KEY,
+  POMODORO_STORAGE_KEY,
+  PomodoroContext,
+  type PomodoroAlert,
+  type PomodoroContextValue,
+  type PomodoroSettingsStatus,
+} from './pomodoroContext'
+import { getPomodoroSettings, savePomodoroSettings, toSettings } from './pomodoroSettingsApi'
 import {
   POMODORO_SOUND_STORAGE_KEY,
   parseSoundSettings,
@@ -11,14 +19,17 @@ import {
   DEFAULT_POMODORO_SETTINGS,
   PHASE_LABELS,
   advance,
+  applySettings,
   createInitialState,
   formatRemaining,
   getRemainingMs,
   isAtPhaseStart,
+  parseSettings,
   parseStoredState,
   pause,
   phaseDurationMs,
   resetPhase,
+  sameSettings,
   skip,
   start,
   type AdvanceResult,
@@ -47,6 +58,24 @@ const ALERT_VISIBLE_MS = 20_000
 /** Krótki tekst do tytułu karty – widać go nawet wtedy, gdy aplikacja jest w tle i dźwięk jest wyciszony. */
 function alertTitle(alert: PomodoroAlert): string {
   return alert.endedPhase === 'work' ? 'Czas na przerwę' : 'Czas wracać do pracy'
+}
+
+/** Ostatnio znane ustawienia z tej przeglądarki albo domyślne (np. pierwsze logowanie na tym urządzeniu). */
+function readCachedSettings(): PomodoroSettings {
+  try {
+    const raw = localStorage.getItem(POMODORO_SETTINGS_STORAGE_KEY)
+    return (raw ? parseSettings(JSON.parse(raw)) : null) ?? DEFAULT_POMODORO_SETTINGS
+  } catch {
+    return DEFAULT_POMODORO_SETTINGS
+  }
+}
+
+function writeCachedSettings(settings: PomodoroSettings): void {
+  try {
+    localStorage.setItem(POMODORO_SETTINGS_STORAGE_KEY, JSON.stringify(settings))
+  } catch {
+    // Zablokowany localStorage – ustawienia i tak przyjdą z serwera po odświeżeniu.
+  }
 }
 
 function readStoredState(settings: PomodoroSettings): PomodoroState | null {
@@ -79,8 +108,6 @@ function claimAlert(endedAt: number): boolean {
 }
 
 interface PomodoroProviderProps {
-  /** Czasy cyklu. Gdy powstanie zapis ustawień użytkownika (SCRUM-43), wystarczy je tu przekazać. */
-  settings?: PomodoroSettings
   children: ReactNode
 }
 
@@ -88,8 +115,11 @@ interface PomodoroProviderProps {
  * Timer Pomodoro dla całej aplikacji. Siedzi nad zakładkami (w App), więc działa dalej po przejściu
  * do notatek czy harmonogramów. Stan zapisuje w localStorage: przetrwa odświeżenie strony,
  * a druga karta z aplikacją pokazuje ten sam timer. Na koniec fazy pokazuje komunikat i (bez wyciszenia) gra dźwięk.
+ * Czasy cyklu pobiera z konta użytkownika (GET /api/pomodoro-settings); do czasu odpowiedzi używa kopii z przeglądarki.
  */
-export function PomodoroProvider({ settings = DEFAULT_POMODORO_SETTINGS, children }: PomodoroProviderProps) {
+export function PomodoroProvider({ children }: PomodoroProviderProps) {
+  const [settings, setSettings] = useState<PomodoroSettings>(readCachedSettings)
+  const [settingsStatus, setSettingsStatus] = useState<PomodoroSettingsStatus>('loading')
   // Po odświeżeniu strony od razu nadrabiamy fazy, które skończyły się w międzyczasie (bez dźwięku).
   const [state, setState] = useState<PomodoroState>(() => {
     const stored = readStoredState(settings) ?? createInitialState(settings)
@@ -103,6 +133,8 @@ export function PomodoroProvider({ settings = DEFAULT_POMODORO_SETTINGS, childre
   // Aktualny stan także poza renderowaniem (tyknięcia, zdarzenia). Każda zmiana stanu przechodzi przez commit(),
   // więc ref i stan Reacta są zawsze zgodne, a efekty uboczne (dźwięk) wykonujemy raz, poza aktualizacją stanu.
   const stateRef = useRef(state)
+  // Ustawienia także poza renderowaniem: zmiana musi zadziałać od razu, a nie dopiero po kolejnym renderze.
+  const settingsRef = useRef(settings)
   const soundRef = useRef(soundSettings)
   useEffect(() => {
     soundRef.current = soundSettings
@@ -141,12 +173,12 @@ export function PomodoroProvider({ settings = DEFAULT_POMODORO_SETTINGS, childre
   const sync = useCallback(() => {
     const time = Date.now()
     setNow(time)
-    const result = advance(stateRef.current, settings, time)
+    const result = advance(stateRef.current, settingsRef.current, time)
     if (result.endedPhases.length > 0) {
       commit(result.state)
       announcePhaseEnd(result, time)
     }
-  }, [settings, commit, announcePhaseEnd])
+  }, [commit, announcePhaseEnd])
 
   /** Akcja użytkownika: najpierw nadrabiamy zaległe przejścia, potem wykonujemy akcję na aktualnym stanie. */
   const act = useCallback(
@@ -155,9 +187,55 @@ export function PomodoroProvider({ settings = DEFAULT_POMODORO_SETTINGS, childre
       setAlert(null)
       const time = Date.now()
       setNow(time)
-      commit(action(advance(stateRef.current, settings, time).state, time))
+      commit(action(advance(stateRef.current, settingsRef.current, time).state, time))
     },
-    [settings, commit],
+    [commit],
+  )
+
+  /**
+   * Przyjmuje nowe ustawienia: najpierw nadrabia zaległe przejścia według starych czasów, potem przelicza
+   * bieżącą fazę według nowych (czas, który upłynął, się liczy – zob. applySettings).
+   */
+  const applyNewSettings = useCallback(
+    (next: PomodoroSettings) => {
+      const previous = settingsRef.current
+      writeCachedSettings(next)
+      if (sameSettings(previous, next)) return
+
+      const time = Date.now()
+      const caughtUp = advance(stateRef.current, previous, time).state
+      settingsRef.current = next
+      setSettings(next)
+      setNow(time)
+      commit(applySettings(caughtUp, previous, next, time))
+    },
+    [commit],
+  )
+
+  // Ustawienia z konta. Do czasu odpowiedzi timer liczy według kopii z przeglądarki (albo domyślnych).
+  useEffect(() => {
+    let ignore = false
+    getPomodoroSettings()
+      .then((loaded) => {
+        if (ignore) return
+        applyNewSettings(toSettings(loaded))
+        setSettingsStatus('ready')
+      })
+      .catch(() => {
+        if (!ignore) setSettingsStatus('error')
+      })
+    return () => {
+      ignore = true
+    }
+  }, [applyNewSettings])
+
+  const saveSettings = useCallback(
+    async (next: PomodoroSettings) => {
+      const saved = await savePomodoroSettings(next)
+      applyNewSettings(toSettings(saved))
+      setSettingsStatus('ready')
+    },
+    [applyNewSettings],
   )
 
   // Tyka tylko, gdy timer działa. W karcie w tle przeglądarka spowalnia interwał – nie szkodzi, liczy się endsAt.
@@ -202,6 +280,19 @@ export function PomodoroProvider({ settings = DEFAULT_POMODORO_SETTINGS, childre
   // Zmiana w innej karcie (start, pauza, wylogowanie, ustawienia dźwięku) – przyjmujemy jej stan.
   useEffect(() => {
     const handleStorage = (event: StorageEvent) => {
+      // Inna karta zapisała ustawienia. Stan timera przeliczyła już ona i przyśle go osobnym zdarzeniem (zaraz po tym).
+      if (event.key === POMODORO_SETTINGS_STORAGE_KEY) {
+        try {
+          const next = event.newValue ? parseSettings(JSON.parse(event.newValue)) : null
+          if (next && !sameSettings(next, settingsRef.current)) {
+            settingsRef.current = next
+            setSettings(next)
+          }
+        } catch {
+          // Uszkodzona wartość – zostajemy przy swoich ustawieniach.
+        }
+        return
+      }
       if (event.key === POMODORO_SOUND_STORAGE_KEY) {
         try {
           setSoundSettings(parseSoundSettings(event.newValue ? JSON.parse(event.newValue) : null))
@@ -213,7 +304,8 @@ export function PomodoroProvider({ settings = DEFAULT_POMODORO_SETTINGS, childre
       if (event.key !== POMODORO_STORAGE_KEY) return
       let next: PomodoroState | null
       try {
-        next = event.newValue ? parseStoredState(JSON.parse(event.newValue), settings) : createInitialState(settings)
+        const current = settingsRef.current
+        next = event.newValue ? parseStoredState(JSON.parse(event.newValue), current) : createInitialState(current)
       } catch {
         return
       }
@@ -224,7 +316,7 @@ export function PomodoroProvider({ settings = DEFAULT_POMODORO_SETTINGS, childre
     }
     window.addEventListener('storage', handleStorage)
     return () => window.removeEventListener('storage', handleStorage)
-  }, [settings, commit])
+  }, [commit])
 
   const remainingMs = getRemainingMs(state, now)
   const remainingText = formatRemaining(remainingMs)
@@ -272,6 +364,8 @@ export function PomodoroProvider({ settings = DEFAULT_POMODORO_SETTINGS, childre
     () => ({
       state,
       settings,
+      settingsStatus,
+      saveSettings,
       remainingMs,
       phaseDurationMs: phaseDurationMs(state.phase, settings),
       running,
@@ -288,7 +382,20 @@ export function PomodoroProvider({ settings = DEFAULT_POMODORO_SETTINGS, childre
       alert,
       dismissAlert,
     }),
-    [state, settings, remainingMs, running, act, soundSettings, updateSoundSettings, previewSound, alert, dismissAlert],
+    [
+      state,
+      settings,
+      settingsStatus,
+      saveSettings,
+      remainingMs,
+      running,
+      act,
+      soundSettings,
+      updateSoundSettings,
+      previewSound,
+      alert,
+      dismissAlert,
+    ],
   )
 
   return <PomodoroContext.Provider value={value}>{children}</PomodoroContext.Provider>

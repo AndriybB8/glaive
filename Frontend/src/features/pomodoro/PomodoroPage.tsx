@@ -1,7 +1,8 @@
-import { useId } from 'react'
+import { useId, useState } from 'react'
 import { Button } from '../../components/ui/Button'
 import { SelectField } from '../../components/ui/SelectField'
 import { usePomodoro } from './pomodoroContext'
+import { PomodoroSettingsDialog } from './PomodoroSettingsDialog'
 import { POMODORO_SOUNDS, type PomodoroSoundId } from './pomodoroSound'
 import { PHASE_LABELS, currentSessionNumber, formatRemaining, type PomodoroPhase } from './pomodoroTimer'
 
@@ -23,6 +24,7 @@ export function PomodoroPage() {
   const {
     state,
     settings,
+    settingsStatus,
     remainingMs,
     phaseDurationMs,
     running,
@@ -38,6 +40,8 @@ export function PomodoroPage() {
     previewSound,
   } = usePomodoro()
   const volumeId = useId()
+  const timesId = useId()
+  const [settingsOpen, setSettingsOpen] = useState(false)
 
   const styles = phaseStyles[state.phase]
   const fraction = phaseDurationMs > 0 ? remainingMs / phaseDurationMs : 0
@@ -142,6 +146,40 @@ export function PomodoroPage() {
           )}
         </div>
 
+        <section aria-labelledby={timesId} className="flex w-full flex-col gap-3 rounded-lg border border-slate-200 p-4">
+          <div className="flex items-center justify-between gap-3">
+            <h2 id={timesId} className="text-sm font-semibold text-slate-900">
+              Czasy cyklu
+            </h2>
+            <Button variant="secondary" onClick={() => setSettingsOpen(true)} className="min-h-11 sm:min-h-9">
+              Zmień
+            </Button>
+          </div>
+          <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
+            <div>
+              <dt className="text-slate-500">Praca</dt>
+              <dd className="font-medium text-slate-900 tabular-nums">{settings.workMinutes} min</dd>
+            </div>
+            <div>
+              <dt className="text-slate-500">Sesje w cyklu</dt>
+              <dd className="font-medium text-slate-900 tabular-nums">{settings.sessionsBeforeLongBreak}</dd>
+            </div>
+            <div>
+              <dt className="text-slate-500">Krótka przerwa</dt>
+              <dd className="font-medium text-slate-900 tabular-nums">{settings.shortBreakMinutes} min</dd>
+            </div>
+            <div>
+              <dt className="text-slate-500">Długa przerwa</dt>
+              <dd className="font-medium text-slate-900 tabular-nums">{settings.longBreakMinutes} min</dd>
+            </div>
+          </dl>
+          {settingsStatus === 'error' && (
+            <p className="text-sm text-amber-800">
+              Nie udało się wczytać ustawień z konta. Timer używa ostatnio zapisanych na tym urządzeniu albo domyślnych.
+            </p>
+          )}
+        </section>
+
         <section aria-labelledby={`${volumeId}-heading`} className="flex w-full flex-col gap-4 rounded-lg border border-slate-200 p-4">
           <div className="flex items-center justify-between gap-3">
             <h2 id={`${volumeId}-heading`} className="text-sm font-semibold text-slate-900">
@@ -195,17 +233,14 @@ export function PomodoroPage() {
         </section>
 
         <div className="w-full rounded-lg bg-slate-50 px-4 py-3 text-sm text-slate-600">
-          <p>
-            {settings.workMinutes} min pracy, {settings.shortBreakMinutes} min przerwy, a po {settings.sessionsBeforeLongBreak}{' '}
-            sesjach {settings.longBreakMinutes} min długiej przerwy. Przerwy i praca zmieniają się same.
-          </p>
-          <p className="mt-1">Timer działa dalej, gdy przejdziesz do notatek, przełączysz kartę albo odświeżysz stronę.</p>
+          <p>Przerwy i praca zmieniają się same. Timer działa dalej, gdy przejdziesz do notatek, przełączysz kartę albo odświeżysz stronę.</p>
           <p className="mt-1">
             Koniec fazy zawsze widać też na ekranie i w tytule karty (🔔) – także przy wyciszonym dźwięku. Przeglądarka nie
             zna trybu wyciszenia telefonu, dlatego dźwięk wyciszasz tutaj.
           </p>
         </div>
       </div>
+      {settingsOpen && <PomodoroSettingsDialog onClose={() => setSettingsOpen(false)} />}
     </div>
   )
 }
