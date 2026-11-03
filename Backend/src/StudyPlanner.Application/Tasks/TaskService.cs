@@ -16,7 +16,7 @@ public sealed class TaskService(
     private static readonly TaskError ScheduleNotFound = new(TaskErrorType.NotFound, "Nie znaleziono harmonogramu.");
 
     /// <summary>Zadania harmonogramu: najpierw z najbliższym terminem (bez terminu na końcu), potem wg priorytetu.</summary>
-    public async Task<TaskResult<IReadOnlyList<TaskDto>>> GetByScheduleAsync(Guid scheduleId, CancellationToken cancellationToken)
+    public async Task<TaskResult<IReadOnlyList<TaskDto>>> GetByScheduleAsync(Guid scheduleId, IReadOnlyList<Guid> tagIds, CancellationToken cancellationToken)
     {
         var schedule = await schedules.GetByIdAsync(scheduleId, currentUser.UserId, cancellationToken);
         if (schedule is null)
@@ -24,7 +24,7 @@ public sealed class TaskService(
             return TaskResult<IReadOnlyList<TaskDto>>.Failure(ScheduleNotFound);
         }
 
-        var items = await tasks.GetByScheduleAsync(scheduleId, currentUser.UserId, cancellationToken);
+        var items = await tasks.GetByScheduleAsync(scheduleId, currentUser.UserId, tagIds, cancellationToken);
         IReadOnlyList<TaskDto> result = items
             .OrderBy(t => t.DueDate is null)
             .ThenBy(t => t.DueDate)

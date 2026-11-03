@@ -8,9 +8,9 @@ namespace StudyPlanner.Api.Controllers;
 public sealed class TasksController(TaskService taskService) : ControllerBase
 {
     [HttpGet("api/schedules/{scheduleId:guid}/tasks")]
-    public async Task<ActionResult<IReadOnlyList<TaskDto>>> GetBySchedule(Guid scheduleId, CancellationToken cancellationToken)
+    public async Task<ActionResult<IReadOnlyList<TaskDto>>> GetBySchedule(Guid scheduleId,[FromQuery] List<Guid> tagId, CancellationToken cancellationToken)
     {
-        var result = await taskService.GetByScheduleAsync(scheduleId, cancellationToken);
+        var result = await taskService.GetByScheduleAsync(scheduleId, tagId, cancellationToken);
         return result.IsSuccess ? Ok(result.Value) : ToErrorResponse(result.Error!);
     }
 

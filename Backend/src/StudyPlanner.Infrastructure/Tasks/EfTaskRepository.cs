@@ -7,12 +7,18 @@ namespace StudyPlanner.Infrastructure.Tasks;
 
 public sealed class EfTaskRepository(AppDbContext db) : ITaskRepository
 {
-    public async Task<IReadOnlyList<TaskItem>> GetByScheduleAsync(Guid scheduleId, Guid userId, CancellationToken cancellationToken)
+    public async Task<IReadOnlyList<TaskItem>> GetByScheduleAsync(Guid scheduleId, Guid userId, IReadOnlyList<Guid> tagIds, CancellationToken cancellationToken)
     {
-        return await db.Tasks
+        var q = db.Tasks
             .AsNoTracking()
-            .Where(t => t.ScheduleId == scheduleId && t.UserId == userId)
-            .ToListAsync(cancellationToken);
+            .Where(t => t.ScheduleId == scheduleId && t.UserId == userId);
+
+        foreach (var tagId in tagIds)
+        {
+            q = q.Where(t => db.TaskTags.Any(tt => tt.TaskId == t.Id && tt.TagId == tagId));
+        }
+
+        return await q.ToListAsync(cancellationToken);
     }
 
     public Task<TaskItem?> GetByIdAsync(Guid id, Guid userId, CancellationToken cancellationToken)
