@@ -140,7 +140,7 @@ public class TaskServiceTests
         await _service.CreateAsync(_schedule.Id, new CreateTaskRequest("Wcześniej, niski", null, Feb1, TaskPriority.Low, null), CancellationToken.None);
         await _service.CreateAsync(_schedule.Id, new CreateTaskRequest("Wcześniej, wysoki", null, Feb1, TaskPriority.High, null), CancellationToken.None);
 
-        var result = await _service.GetByScheduleAsync(_schedule.Id, CancellationToken.None);
+        var result = await _service.GetByScheduleAsync(_schedule.Id, [], CancellationToken.None);
 
         Assert.Equal(["Wcześniej, wysoki", "Wcześniej, niski", "Później", "Bez terminu"], result.Value!.Select(t => t.Title));
     }
@@ -153,7 +153,7 @@ public class TaskServiceTests
         await CreateAsync("Moje");
         await _service.CreateAsync(other.Id, new CreateTaskRequest("Z innego", null, null, null, null), CancellationToken.None);
 
-        var result = await _service.GetByScheduleAsync(_schedule.Id, CancellationToken.None);
+        var result = await _service.GetByScheduleAsync(_schedule.Id, [], CancellationToken.None);
 
         Assert.Equal("Moje", Assert.Single(result.Value!).Title);
     }
@@ -252,7 +252,7 @@ public class TaskServiceTests
 
         var get = await _service.GetByIdAsync(created.Id, CancellationToken.None);
         var status = await _service.ChangeStatusAsync(created.Id, new ChangeTaskStatusRequest(TaskItemStatus.Done), CancellationToken.None);
-        var list = await _service.GetByScheduleAsync(_schedule.Id, CancellationToken.None);
+        var list = await _service.GetByScheduleAsync(_schedule.Id, [], CancellationToken.None);
 
         Assert.Equal(TaskErrorType.NotFound, get.Error!.Type);
         Assert.Equal(TaskErrorType.NotFound, status.Error!.Type);
@@ -293,7 +293,7 @@ public class TaskServiceTests
     {
         public List<TaskItem> Items { get; } = [];
 
-        public Task<IReadOnlyList<TaskItem>> GetByScheduleAsync(Guid scheduleId, Guid userId, CancellationToken cancellationToken) =>
+        public Task<IReadOnlyList<TaskItem>> GetByScheduleAsync(Guid scheduleId, Guid userId, IReadOnlyList<Guid> tagIds, CancellationToken cancellationToken) =>
             Task.FromResult<IReadOnlyList<TaskItem>>(Items.Where(t => t.ScheduleId == scheduleId && t.UserId == userId).ToList());
 
         public Task<TaskItem?> GetByIdAsync(Guid id, Guid userId, CancellationToken cancellationToken) =>
