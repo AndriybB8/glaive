@@ -17,3 +17,8 @@ public sealed record LoginRequest(string? Email, string? Password);
 
 public sealed record LoginResponseDto(string Token, DateTime ExpiresAt);
 
+public sealed record UserLookupRequest(string? Email);
+
+/// <summary>Tylko to, co potrzebne do udostępnienia listy – bez statusu i daty założenia konta.</summary>
+public sealed record UserLookupDto(Guid Id, string Email);
+

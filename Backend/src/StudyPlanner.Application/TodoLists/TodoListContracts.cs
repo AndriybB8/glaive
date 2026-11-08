@@ -2,13 +2,15 @@ using StudyPlanner.Domain.TodoLists;
 
 namespace StudyPlanner.Application.TodoLists;
 
-public sealed record TodoListDto(Guid Id, string Title, DateTime CreatedAt, DateTime UpdatedAt, int Version)
+/// <param name="Access">Dostęp bieżącego użytkownika – frontend ukrywa na jego podstawie niedostępne akcje.</param>
+public sealed record TodoListDto(Guid Id, string Title, DateTime CreatedAt, DateTime UpdatedAt, int Version, TodoListAccess Access)
 {
-    public static TodoListDto From(TodoList list) =>
-        new(list.Id, list.Title, list.CreatedAt, list.UpdatedAt, list.Version);
+    public static TodoListDto From(TodoList list, TodoListAccess access) =>
+        new(list.Id, list.Title, list.CreatedAt, list.UpdatedAt, list.Version, access);
 }
 
 /// <summary>Lista na liście list – z licznikami do paska postępu („3 z 7”).</summary>
+/// <param name="Access">Dostęp bieżącego użytkownika – frontend ukrywa na jego podstawie niedostępne akcje.</param>
 public sealed record TodoListSummaryDto(
     Guid Id,
     string Title,
@@ -16,7 +18,8 @@ public sealed record TodoListSummaryDto(
     int DoneCount,
     DateTime CreatedAt,
     DateTime UpdatedAt,
-    int Version)
+    int Version,
+    TodoListAccess Access)
 {
     public static TodoListSummaryDto From(TodoListSummary summary) =>
         new(
@@ -26,7 +29,8 @@ public sealed record TodoListSummaryDto(
             summary.DoneCount,
             summary.List.CreatedAt,
             summary.List.UpdatedAt,
-            summary.List.Version);
+            summary.List.Version,
+            summary.Access);
 }
 
 /// <summary>Nazwa jest opcjonalna, żeby brak wartości dało się zgłosić czytelnym komunikatem walidacji.</summary>

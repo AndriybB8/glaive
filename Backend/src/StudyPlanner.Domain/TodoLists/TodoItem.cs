@@ -13,7 +13,10 @@ public class TodoItem
     /// <summary>Lista, do której należy punkt. W bazie: klucz obcy do tabeli list (usuwanie kaskadowe).</summary>
     public Guid ListId { get; private set; }
 
-    /// <summary>Właściciel – ten sam co listy. Trzymany osobno, żeby sprawdzać dostęp bez łączenia tabel.</summary>
+    /// <summary>
+    /// Właściciel – ten sam co listy, także gdy punkt dodała osoba, której udostępniono listę.
+    /// Nie służy do sprawdzania dostępu: ten ustala się na podstawie listy (osoby z dostępem nie są tu zapisane).
+    /// </summary>
     public Guid UserId { get; private set; }
 
     public string Title { get; private set; } = string.Empty;

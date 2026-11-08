@@ -5,6 +5,7 @@ public enum TodoListErrorType
     NotFound,
     Validation,
     Conflict,
+    Forbidden,
 }
 
 /// <param name="Current">Przy konflikcie: aktualna wersja listy z serwera.</param>

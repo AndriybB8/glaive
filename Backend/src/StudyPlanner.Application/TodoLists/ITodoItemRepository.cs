@@ -2,18 +2,21 @@ using StudyPlanner.Domain.TodoLists;
 
 namespace StudyPlanner.Application.TodoLists;
 
+/// <summary>
+/// Punkty list. Repozytorium nie sprawdza dostępu: listę mogą oglądać także osoby, którym ją udostępniono,
+/// dlatego dostęp ustala <see cref="TodoItemService"/> przez <see cref="ITodoListRepository.GetWithAccessAsync"/>.
+/// </summary>
 public interface ITodoItemRepository
 {
-    Task<IReadOnlyList<TodoItem>> GetByListAsync(Guid listId, Guid userId, CancellationToken cancellationToken);
+    Task<IReadOnlyList<TodoItem>> GetByListAsync(Guid listId, CancellationToken cancellationToken);
 
     /// <summary>
     /// Punkty listy do zmiany (śledzone przez kontekst) – np. przy zmianie kolejności.
     /// Zmienione punkty zapisuje <see cref="UpdateRangeAsync"/>.
     /// </summary>
-    Task<IReadOnlyList<TodoItem>> GetByListForUpdateAsync(Guid listId, Guid userId, CancellationToken cancellationToken);
+    Task<IReadOnlyList<TodoItem>> GetByListForUpdateAsync(Guid listId, CancellationToken cancellationToken);
 
-    /// <summary>Zwraca punkt tylko wtedy, gdy należy do podanego użytkownika.</summary>
-    Task<TodoItem?> GetByIdAsync(Guid id, Guid userId, CancellationToken cancellationToken);
+    Task<TodoItem?> GetByIdAsync(Guid id, CancellationToken cancellationToken);
 
     Task AddAsync(TodoItem item, CancellationToken cancellationToken);
 

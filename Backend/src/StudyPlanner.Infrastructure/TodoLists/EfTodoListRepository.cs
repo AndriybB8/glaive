@@ -9,26 +9,47 @@ public sealed class EfTodoListRepository(AppDbContext db) : ITodoListRepository
 {
     public async Task<IReadOnlyList<TodoListSummary>> GetSummariesByUserAsync(Guid userId, CancellationToken cancellationToken)
     {
-        // Liczniki jako podzapytania w jednym SELECT – punktów nie wczytujemy.
-        return await db.TodoLists
+        // Liczniki i rola jako podzapytania w jednym SELECT – punktów nie wczytujemy.
+        // Dostęp daje tylko przyjęte zaproszenie (accepted_at).
+        var rows = await db.TodoLists
             .AsNoTracking()
-            .Where(l => l.UserId == userId)
-            .Select(l => new TodoListSummary(
-                l,
-                db.TodoItems.Count(i => i.ListId == l.Id),
-                db.TodoItems.Count(i => i.ListId == l.Id && i.IsDone)))
+            .Where(l => l.UserId == userId
+                        || db.TodoListMembers.Any(m => m.ListId == l.Id && m.UserId == userId && m.AcceptedAt != null))
+            .Select(l => new
+            {
+                List = l,
+                ItemCount = db.TodoItems.Count(i => i.ListId == l.Id),
+                DoneCount = db.TodoItems.Count(i => i.ListId == l.Id && i.IsDone),
+                Role = db.TodoListMembers
+                    .Where(m => m.ListId == l.Id && m.UserId == userId && m.AcceptedAt != null)
+                    .Select(m => (TodoListMemberRole?)m.Role)
+                    .FirstOrDefault(),
+            })
             .ToListAsync(cancellationToken);
+
+        return rows
+            .Select(r => new TodoListSummary(r.List, r.ItemCount, r.DoneCount, ToAccess(r.List, userId, r.Role)!.Value))
+            .ToList();
     }
 
-    public Task<TodoList?> GetByIdAsync(Guid id, Guid userId, CancellationToken cancellationToken)
+    public async Task<TodoListWithAccess?> GetWithAccessAsync(Guid id, Guid userId, CancellationToken cancellationToken)
     {
-        // Śledzona przez kontekst – TodoListService zmienia ją i zapisuje przez UpdateAsync.
-        return db.TodoLists.FirstOrDefaultAsync(l => l.Id == id && l.UserId == userId, cancellationToken);
-    }
+        // Lista śledzona przez kontekst – TodoListService zmienia ją i zapisuje przez UpdateAsync.
+        var row = await db.TodoLists
+            .Where(l => l.Id == id)
+            .Select(l => new
+            {
+                List = l,
+                Role = db.TodoListMembers
+                    .Where(m => m.ListId == l.Id && m.UserId == userId && m.AcceptedAt != null)
+                    .Select(m => (TodoListMemberRole?)m.Role)
+                    .FirstOrDefault(),
+            })
+            .FirstOrDefaultAsync(cancellationToken);
 
-    public Task<bool> ExistsAsync(Guid id, Guid userId, CancellationToken cancellationToken)
-    {
-        return db.TodoLists.AnyAsync(l => l.Id == id && l.UserId == userId, cancellationToken);
+        return row is not null && ToAccess(row.List, userId, row.Role) is { } access
+            ? new TodoListWithAccess(row.List, access)
+            : null;
     }
 
     public async Task AddAsync(TodoList list, CancellationToken cancellationToken)
@@ -53,8 +74,18 @@ public sealed class EfTodoListRepository(AppDbContext db) : ITodoListRepository
 
     public async Task DeleteAsync(TodoList list, CancellationToken cancellationToken)
     {
-        // Punkty listy usuwa baza (ON DELETE CASCADE).
+        // Punkty listy i osoby z dostępem usuwa baza (ON DELETE CASCADE).
         db.TodoLists.Remove(list);
         await db.SaveChangesAsync(cancellationToken);
+    }
+
+    private static TodoListAccess? ToAccess(TodoList list, Guid userId, TodoListMemberRole? role)
+    {
+        if (list.UserId == userId)
+        {
+            return TodoListAccess.Owner;
+        }
+
+        return role?.ToAccess();
     }
 }
