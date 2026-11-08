@@ -10,13 +10,14 @@ public class TodoItemServiceTests
 
     private readonly FakeTodoItemRepository _items = new();
     private readonly FakeTodoListRepository _lists = new();
+    private readonly FakeTodoListNotifier _notifier = new();
     private readonly FixedTimeProvider _time = new(new DateTimeOffset(2026, 11, 2, 12, 0, 0, TimeSpan.Zero));
     private readonly TodoItemService _service;
     private readonly TodoList _list;
 
     public TodoItemServiceTests()
     {
-        _service = new TodoItemService(_items, _lists, new TestUser(UserId), _time);
+        _service = new TodoItemService(_items, _lists, _notifier, new TestUser(UserId), _time);
         _list = TodoList.Create(UserId, "Na egzamin", DateTime.UtcNow);
         _lists.Lists.Add(_list);
     }
@@ -340,6 +341,63 @@ public class TodoItemServiceTests
         Assert.Equal(TodoItemErrorType.Conflict, result.Error!.Type);
     }
 
+    [Fact]
+    public async Task EveryChange_NotifiesPeopleWithAccessWithItemDetails()
+    {
+        var a = await CreateAsync("A");
+        var b = await CreateAsync("B");
+        await _service.UpdateAsync(a.Id, new UpdateTodoItemRequest("A2", null, a.Version), CancellationToken.None);
+        await _service.SetDoneAsync(a.Id, new SetTodoItemDoneRequest(true), CancellationToken.None);
+        await _service.ReorderAsync(_list.Id, new ReorderTodoItemsRequest([b.Id, a.Id]), CancellationToken.None);
+        await _service.DeleteAsync(b.Id, CancellationToken.None);
+
+        Assert.Equal(
+            [
+                new TodoListChange(_list.Id, TodoListChangeKind.ItemCreated, a.Id, "A"),
+                new TodoListChange(_list.Id, TodoListChangeKind.ItemCreated, b.Id, "B"),
+                new TodoListChange(_list.Id, TodoListChangeKind.ItemUpdated, a.Id, "A2"),
+                new TodoListChange(_list.Id, TodoListChangeKind.ItemUpdated, a.Id, "A2"),
+                new TodoListChange(_list.Id, TodoListChangeKind.ItemsReordered),
+                new TodoListChange(_list.Id, TodoListChangeKind.ItemDeleted, b.Id, "B"),
+            ],
+            _notifier.Changes.Select(c => c.Change));
+        Assert.All(_notifier.Changes, c => Assert.Null(c.Recipients));
+    }
+
+    [Fact]
+    public async Task NothingSaved_NotifiesNobody()
+    {
+        var a = await CreateAsync("A");
+        var b = await CreateAsync("B");
+        _notifier.Changes.Clear();
+
+        await _service.UpdateAsync(a.Id, new UpdateTodoItemRequest("A", null, a.Version), CancellationToken.None);
+        await _service.UpdateAsync(a.Id, new UpdateTodoItemRequest("Stara wersja", null, a.Version + 5), CancellationToken.None);
+        await _service.UpdateAsync(a.Id, new UpdateTodoItemRequest("", null, a.Version), CancellationToken.None);
+        await _service.SetDoneAsync(a.Id, new SetTodoItemDoneRequest(false), CancellationToken.None);
+        await _service.ReorderAsync(_list.Id, new ReorderTodoItemsRequest([a.Id, b.Id]), CancellationToken.None);
+        await _service.ReorderAsync(_list.Id, new ReorderTodoItemsRequest([a.Id]), CancellationToken.None);
+        _items.FailNextRangeUpdate = true;
+        await _service.ReorderAsync(_list.Id, new ReorderTodoItemsRequest([b.Id, a.Id]), CancellationToken.None);
+
+        Assert.Empty(_notifier.Changes);
+    }
+
+    [Fact]
+    public async Task ForbiddenOrHiddenChanges_NotifyNobody()
+    {
+        var (viewerList, viewerItem) = SharedList(TodoListMemberRole.Viewer);
+        var (pendingList, pendingItem) = SharedList(TodoListMemberRole.Editor, accepted: false);
+
+        await _service.CreateAsync(viewerList.Id, new CreateTodoItemRequest("X"), CancellationToken.None);
+        await _service.SetDoneAsync(viewerItem.Id, new SetTodoItemDoneRequest(true), CancellationToken.None);
+        await _service.DeleteAsync(viewerItem.Id, CancellationToken.None);
+        await _service.CreateAsync(pendingList.Id, new CreateTodoItemRequest("X"), CancellationToken.None);
+        await _service.DeleteAsync(pendingItem.Id, CancellationToken.None);
+
+        Assert.Empty(_notifier.Changes);
+    }
+
     /// <summary>Lista innej osoby z jednym punktem, udostępniona bieżącemu użytkownikowi.</summary>
     private (TodoList List, TodoItem Item) SharedList(TodoListMemberRole role, bool accepted = true)
     {
@@ -530,6 +588,9 @@ public class TodoItemServiceTests
 
             return Task.FromResult(access is { } value ? new TodoListWithAccess(list, value) : null);
         }
+
+        public Task<IReadOnlyList<Guid>> GetUserIdsWithAccessAsync(Guid id, CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
 
         public Task AddAsync(TodoList list, CancellationToken cancellationToken)
         {

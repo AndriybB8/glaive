@@ -9,12 +9,13 @@ public class TodoListServiceTests
     private static readonly Guid UserId = Guid.NewGuid();
 
     private readonly FakeTodoListRepository _repository = new();
+    private readonly FakeTodoListNotifier _notifier = new();
     private readonly FixedTimeProvider _time = new(new DateTimeOffset(2026, 11, 2, 12, 0, 0, TimeSpan.Zero));
     private readonly TodoListService _service;
 
     public TodoListServiceTests()
     {
-        _service = new TodoListService(_repository, new TestUser(UserId), _time);
+        _service = new TodoListService(_repository, _notifier, new TestUser(UserId), _time);
     }
 
     private async Task<TodoListDto> CreateAsync(string title = "Na egzamin") =>
@@ -176,6 +177,57 @@ public class TodoListServiceTests
         Assert.Single(_repository.Lists);
     }
 
+    [Fact]
+    public async Task Rename_NotifiesPeopleWithAccess()
+    {
+        var created = await CreateAsync("Zakupy");
+
+        await _service.UpdateAsync(created.Id, new UpdateTodoListRequest("Zakupy 2", created.Version), CancellationToken.None);
+
+        var (change, recipients) = Assert.Single(_notifier.Changes);
+        Assert.Equal(new TodoListChange(created.Id, TodoListChangeKind.ListRenamed, ListTitle: "Zakupy 2"), change);
+        Assert.Null(recipients);
+    }
+
+    [Fact]
+    public async Task Rename_NotifiesNobodyWhenNothingWasSaved()
+    {
+        var created = await CreateAsync("Zakupy");
+        var shared = SharedList(TodoListMemberRole.Editor);
+
+        await _service.UpdateAsync(created.Id, new UpdateTodoListRequest("Zakupy", created.Version), CancellationToken.None);
+        await _service.UpdateAsync(created.Id, new UpdateTodoListRequest("Zakupy 2", created.Version + 1), CancellationToken.None);
+        await _service.UpdateAsync(shared.Id, new UpdateTodoListRequest("Cudza 2", shared.Version), CancellationToken.None);
+
+        Assert.Empty(_notifier.Changes);
+    }
+
+    [Fact]
+    public async Task Delete_NotifiesEveryoneWhoHadAccessBeforeTheCascade()
+    {
+        var created = await CreateAsync("Zakupy");
+        var memberId = Guid.NewGuid();
+        var member = TodoListMember.Invite(created.Id, memberId, TodoListMemberRole.Viewer, DateTime.UtcNow);
+        member.Accept(DateTime.UtcNow);
+        _repository.Members.Add(member);
+
+        await _service.DeleteAsync(created.Id, CancellationToken.None);
+
+        var (change, recipients) = Assert.Single(_notifier.Changes);
+        Assert.Equal(new TodoListChange(created.Id, TodoListChangeKind.ListDeleted, ListTitle: "Zakupy"), change);
+        Assert.Equal([UserId, memberId], recipients!);
+    }
+
+    [Fact]
+    public async Task Delete_NotifiesNobodyWhenForbidden()
+    {
+        var shared = SharedList(TodoListMemberRole.Editor);
+
+        await _service.DeleteAsync(shared.Id, CancellationToken.None);
+
+        Assert.Empty(_notifier.Changes);
+    }
+
     /// <summary>Lista innej osoby, udostępniona bieżącemu użytkownikowi.</summary>
     private TodoList SharedList(TodoListMemberRole role, bool accepted = true, string title = "Cudza lista")
     {
@@ -301,6 +353,15 @@ public class TodoListServiceTests
                 : null);
         }
 
+        public Task<IReadOnlyList<Guid>> GetUserIdsWithAccessAsync(Guid id, CancellationToken cancellationToken)
+        {
+            var list = Lists.FirstOrDefault(l => l.Id == id);
+
+            return Task.FromResult<IReadOnlyList<Guid>>(list is null
+                ? []
+                : [list.UserId, .. Members.Where(m => m.ListId == id && m.AcceptedAt != null).Select(m => m.UserId)]);
+        }
+
         private TodoListAccess? AccessOf(TodoList list, Guid userId) =>
             list.UserId == userId
                 ? TodoListAccess.Owner
@@ -317,6 +378,7 @@ public class TodoListServiceTests
         public Task DeleteAsync(TodoList list, CancellationToken cancellationToken)
         {
             Lists.Remove(list);
+            Members.RemoveAll(m => m.ListId == list.Id); // Jak kaskada w bazie.
             return Task.CompletedTask;
         }
     }

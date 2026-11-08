@@ -6,6 +6,7 @@ namespace StudyPlanner.Application.TodoLists;
 public sealed class TodoItemService(
     ITodoItemRepository items,
     ITodoListRepository lists,
+    ITodoListNotifier notifier,
     ICurrentUser currentUser,
     TimeProvider timeProvider)
 {
@@ -71,6 +72,7 @@ public sealed class TodoItemService(
         // klucz obcy do users jest kaskadowy, więc usunięcie konta tej osoby skasowałoby punkt z cudzej listy.
         var item = TodoItem.Create(list.List.UserId, listId, title, position, UtcNow());
         await items.AddAsync(item, cancellationToken);
+        await NotifyAsync(TodoListChangeKind.ItemCreated, item);
 
         return TodoItemResult<TodoItemDto>.Success(TodoItemDto.From(item));
     }
@@ -207,6 +209,8 @@ public sealed class TodoItemService(
             {
                 return TodoItemResult<IReadOnlyList<TodoItemDto>>.Failure(OrderOutdated);
             }
+
+            await notifier.ListChangedAsync(new TodoListChange(listId, TodoListChangeKind.ItemsReordered));
         }
 
         IReadOnlyList<TodoItemDto> result = ids.Select(id => TodoItemDto.From(byId[id])).ToList();
@@ -227,6 +231,8 @@ public sealed class TodoItemService(
         }
 
         await items.DeleteAsync(found.Value.Item, cancellationToken);
+        await NotifyAsync(TodoListChangeKind.ItemDeleted, found.Value.Item);
+
         return TodoItemResult<bool>.Success(true);
     }
 
@@ -257,8 +263,13 @@ public sealed class TodoItemService(
                 : TodoItemResult<TodoItemDto>.Failure(Conflict(current));
         }
 
+        await NotifyAsync(TodoListChangeKind.ItemUpdated, item);
+
         return TodoItemResult<TodoItemDto>.Success(TodoItemDto.From(item));
     }
+
+    private Task NotifyAsync(TodoListChangeKind kind, TodoItem item) =>
+        notifier.ListChangedAsync(new TodoListChange(item.ListId, kind, item.Id, item.Title));
 
     private DateTime UtcNow() => timeProvider.GetUtcNow().UtcDateTime;
 

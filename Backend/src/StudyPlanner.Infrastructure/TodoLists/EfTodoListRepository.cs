@@ -52,6 +52,24 @@ public sealed class EfTodoListRepository(AppDbContext db) : ITodoListRepository
             : null;
     }
 
+    public async Task<IReadOnlyList<Guid>> GetUserIdsWithAccessAsync(Guid id, CancellationToken cancellationToken)
+    {
+        var row = await db.TodoLists
+            .AsNoTracking()
+            .Where(l => l.Id == id)
+            .Select(l => new
+            {
+                OwnerId = l.UserId,
+                MemberIds = db.TodoListMembers
+                    .Where(m => m.ListId == l.Id && m.AcceptedAt != null)
+                    .Select(m => m.UserId)
+                    .ToList(),
+            })
+            .FirstOrDefaultAsync(cancellationToken);
+
+        return row is null ? [] : [row.OwnerId, .. row.MemberIds];
+    }
+
     public async Task AddAsync(TodoList list, CancellationToken cancellationToken)
     {
         db.TodoLists.Add(list);

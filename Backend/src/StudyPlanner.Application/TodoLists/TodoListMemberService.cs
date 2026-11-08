@@ -10,6 +10,7 @@ public sealed class TodoListMemberService(
     ITodoListMemberRepository members,
     ITodoListRepository lists,
     IUserRepository users,
+    ITodoListNotifier notifier,
     ICurrentUser currentUser,
     TimeProvider timeProvider)
 {
@@ -23,7 +24,8 @@ public sealed class TodoListMemberService(
     /// <summary>Osoby z dostępem i oczekujące zaproszenia, od najstarszych – tylko właściciel.</summary>
     public async Task<TodoListResult<IReadOnlyList<TodoListMemberDto>>> GetByListAsync(Guid listId, CancellationToken cancellationToken)
     {
-        if (await EnsureOwnerAsync(listId, cancellationToken) is { } denied)
+        var (_, denied) = await FindOwnedAsync(listId, cancellationToken);
+        if (denied is not null)
         {
             return TodoListResult<IReadOnlyList<TodoListMemberDto>>.Failure(denied);
         }
@@ -41,7 +43,8 @@ public sealed class TodoListMemberService(
     public async Task<TodoListResult<TodoListMemberDto>> InviteAsync(Guid listId, InviteTodoListMemberRequest request, CancellationToken cancellationToken)
     {
         // Najpierw uprawnienia: tylko właściciel może sprawdzać, czy dany adres ma konto.
-        if (await EnsureOwnerAsync(listId, cancellationToken) is { } denied)
+        var (list, denied) = await FindOwnedAsync(listId, cancellationToken);
+        if (denied is not null)
         {
             return TodoListResult<TodoListMemberDto>.Failure(denied);
         }
@@ -71,13 +74,16 @@ public sealed class TodoListMemberService(
 
         var member = TodoListMember.Invite(listId, user.Id, request.Role!.Value, UtcNow());
 
-        return await members.AddAsync(member, cancellationToken) switch
+        switch (await members.AddAsync(member, cancellationToken))
         {
-            AddTodoListMemberResult.Added => TodoListResult<TodoListMemberDto>.Success(
-                TodoListMemberDto.From(new TodoListMemberWithEmail(member, user.Email))),
-            AddTodoListMemberResult.AlreadyExists => TodoListResult<TodoListMemberDto>.Failure(AlreadyMember),
-            _ => TodoListResult<TodoListMemberDto>.Failure(ListNotFound),
-        };
+            case AddTodoListMemberResult.Added:
+                await notifier.InvitationReceivedAsync(user.Id, listId, list!.Title);
+                return TodoListResult<TodoListMemberDto>.Success(TodoListMemberDto.From(new TodoListMemberWithEmail(member, user.Email)));
+            case AddTodoListMemberResult.AlreadyExists:
+                return TodoListResult<TodoListMemberDto>.Failure(AlreadyMember);
+            default:
+                return TodoListResult<TodoListMemberDto>.Failure(ListNotFound);
+        }
     }
 
     /// <summary>Zmiana uprawnień – także przy zaproszeniu, na które jeszcze nie odpowiedziano.</summary>
@@ -87,7 +93,8 @@ public sealed class TodoListMemberService(
         ChangeTodoListMemberRoleRequest request,
         CancellationToken cancellationToken)
     {
-        if (await EnsureOwnerAsync(listId, cancellationToken) is { } denied)
+        var (list, denied) = await FindOwnedAsync(listId, cancellationToken);
+        if (denied is not null)
         {
             return TodoListResult<TodoListMemberDto>.Failure(denied);
         }
@@ -112,6 +119,8 @@ public sealed class TodoListMemberService(
             {
                 return TodoListResult<TodoListMemberDto>.Failure(MemberNotFound);
             }
+
+            await NotifyMemberChangeAsync(TodoListChangeKind.MemberRoleChanged, list!, userId);
         }
 
         return TodoListResult<TodoListMemberDto>.Success(TodoListMemberDto.From(found));
@@ -134,9 +143,15 @@ public sealed class TodoListMemberService(
             return TodoListResult<bool>.Failure(Forbidden);
         }
 
-        return await members.RemoveAsync(listId, userId, cancellationToken)
-            ? TodoListResult<bool>.Success(true)
-            : TodoListResult<bool>.Failure(MemberNotFound);
+        if (!await members.RemoveAsync(listId, userId, cancellationToken))
+        {
+            return TodoListResult<bool>.Failure(MemberNotFound);
+        }
+
+        // Także przy cofniętym zaproszeniu: zaproszona osoba wie wtedy, że ma odświeżyć swoje zaproszenia.
+        await NotifyMemberChangeAsync(TodoListChangeKind.MemberRemoved, list.List, userId);
+
+        return TodoListResult<bool>.Success(true);
     }
 
     /// <summary>Zaproszenia bieżącego użytkownika, od najnowszych.</summary>
@@ -163,9 +178,18 @@ public sealed class TodoListMemberService(
 
         found.Member.Accept(UtcNow());
 
-        return await members.UpdateAsync(found.Member, cancellationToken)
-            ? TodoListResult<bool>.Success(true)
-            : TodoListResult<bool>.Failure(InvitationNotFound);
+        if (!await members.UpdateAsync(found.Member, cancellationToken))
+        {
+            return TodoListResult<bool>.Failure(InvitationNotFound);
+        }
+
+        var list = await lists.GetWithAccessAsync(listId, currentUser.UserId, cancellationToken);
+        if (list is not null)
+        {
+            await NotifyMemberChangeAsync(TodoListChangeKind.MemberJoined, list.List, currentUser.UserId);
+        }
+
+        return TodoListResult<bool>.Success(true);
     }
 
     /// <summary>Odrzucenie usuwa wpis, więc można zostać zaproszonym ponownie. Przyjętej listy nie odrzuca – to opuszczenie listy.</summary>
@@ -182,17 +206,23 @@ public sealed class TodoListMemberService(
             : TodoListResult<bool>.Failure(InvitationNotFound);
     }
 
-    /// <summary>Null, gdy bieżący użytkownik jest właścicielem listy.</summary>
-    private async Task<TodoListError?> EnsureOwnerAsync(Guid listId, CancellationToken cancellationToken)
+    /// <summary>Lista, jeśli bieżący użytkownik jest jej właścicielem; w przeciwnym razie błąd.</summary>
+    private async Task<(TodoList? List, TodoListError? Error)> FindOwnedAsync(Guid listId, CancellationToken cancellationToken)
     {
-        var list = await lists.GetWithAccessAsync(listId, currentUser.UserId, cancellationToken);
-        if (list is null)
+        var found = await lists.GetWithAccessAsync(listId, currentUser.UserId, cancellationToken);
+        if (found is null)
         {
-            return ListNotFound;
+            return (null, ListNotFound);
         }
 
-        return list.Access.CanManageList() ? null : Forbidden;
+        return found.Access.CanManageList() ? (found.List, null) : (null, Forbidden);
     }
+
+    /// <summary>Tylko do właściciela i osoby, której dotyczy zmiana – pozostali nie widzą, kto ma dostęp.</summary>
+    private Task NotifyMemberChangeAsync(TodoListChangeKind kind, TodoList list, Guid memberUserId) =>
+        notifier.ListChangedAsync(
+            new TodoListChange(list.Id, kind, ListTitle: list.Title, MemberUserId: memberUserId),
+            [list.UserId, memberUserId]);
 
     private DateTime UtcNow() => timeProvider.GetUtcNow().UtcDateTime;
 
