@@ -37,6 +37,9 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
 
     public DbSet<TodoItem> TodoItems => Set<TodoItem>();
 
+    /// <summary>Osoby, którym udostępniono listy (tabela todo_list_members).</summary>
+    public DbSet<TodoListMember> TodoListMembers => Set<TodoListMember>();
+
     public DbSet<TaskTag> TaskTags => Set<TaskTag>();
 
     /// <summary>Ustawienia timera Pomodoro – jeden wiersz na użytkownika.</summary>

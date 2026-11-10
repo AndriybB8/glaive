@@ -465,6 +465,42 @@ namespace StudyPlanner.Infrastructure.Persistence.Migrations
                     b.ToTable("todo_lists", (string)null);
                 });
 
+            modelBuilder.Entity("StudyPlanner.Domain.TodoLists.TodoListMember", b =>
+                {
+                    b.Property<Guid>("ListId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("list_id");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("user_id");
+
+                    b.Property<DateTime?>("AcceptedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("accepted_at");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("Role")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("role");
+
+                    b.HasKey("ListId", "UserId")
+                        .HasName("pk_todo_list_members");
+
+                    b.HasIndex("UserId")
+                        .HasDatabaseName("ix_todo_list_members_user_id");
+
+                    b.ToTable("todo_list_members", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_todo_list_members_role", "role IN ('Viewer', 'Editor')");
+                        });
+                });
+
             modelBuilder.Entity("StudyPlanner.Domain.Users.User", b =>
                 {
                     b.Property<Guid>("Id")
@@ -637,6 +673,23 @@ namespace StudyPlanner.Infrastructure.Persistence.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired()
                         .HasConstraintName("fk_todo_lists_users_user_id");
+                });
+
+            modelBuilder.Entity("StudyPlanner.Domain.TodoLists.TodoListMember", b =>
+                {
+                    b.HasOne("StudyPlanner.Domain.TodoLists.TodoList", null)
+                        .WithMany()
+                        .HasForeignKey("ListId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_todo_list_members_todo_lists_list_id");
+
+                    b.HasOne("StudyPlanner.Domain.Users.User", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_todo_list_members_users_user_id");
                 });
 #pragma warning restore 612, 618
         }
