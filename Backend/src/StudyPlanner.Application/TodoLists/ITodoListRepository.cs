@@ -16,6 +16,9 @@ public interface ITodoListRepository
     /// </summary>
     Task<TodoListWithAccess?> GetWithAccessAsync(Guid id, Guid userId, CancellationToken cancellationToken);
 
+    /// <summary>Właściciel listy i osoby po przyjęciu zaproszenia. Pusto, gdy listy nie ma.</summary>
+    Task<IReadOnlyList<Guid>> GetUserIdsWithAccessAsync(Guid id, CancellationToken cancellationToken);
+
     Task AddAsync(TodoList list, CancellationToken cancellationToken);
 
     /// <summary>

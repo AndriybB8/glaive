@@ -3,7 +3,11 @@ using StudyPlanner.Domain.TodoLists;
 
 namespace StudyPlanner.Application.TodoLists;
 
-public sealed class TodoListService(ITodoListRepository repository, ICurrentUser currentUser, TimeProvider timeProvider)
+public sealed class TodoListService(
+    ITodoListRepository repository,
+    ITodoListNotifier notifier,
+    ICurrentUser currentUser,
+    TimeProvider timeProvider)
 {
     private static readonly TodoListError NotFound = new(TodoListErrorType.NotFound, "Nie znaleziono listy.");
     private static readonly TodoListError Forbidden = new(TodoListErrorType.Forbidden, "Tylko właściciel może zmienić nazwę listy albo ją usunąć.");
@@ -92,6 +96,8 @@ public sealed class TodoListService(ITodoListRepository repository, ICurrentUser
                 : TodoListResult<TodoListDto>.Failure(Conflict(current.List));
         }
 
+        await notifier.ListChangedAsync(new TodoListChange(list.Id, TodoListChangeKind.ListRenamed, ListTitle: list.Title));
+
         return TodoListResult<TodoListDto>.Success(ForOwner(list));
     }
 
@@ -109,7 +115,12 @@ public sealed class TodoListService(ITodoListRepository repository, ICurrentUser
             return TodoListResult<bool>.Failure(Forbidden);
         }
 
+        // Odbiorców trzeba ustalić przed usunięciem: kaskada usuwa też osoby z dostępem.
+        var recipients = await repository.GetUserIdsWithAccessAsync(id, cancellationToken);
+
         await repository.DeleteAsync(found.List, cancellationToken);
+        await notifier.ListChangedAsync(new TodoListChange(id, TodoListChangeKind.ListDeleted, ListTitle: found.List.Title), recipients);
+
         return TodoListResult<bool>.Success(true);
     }
 

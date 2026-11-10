@@ -13,6 +13,7 @@ public class TodoListMemberServiceTests
     private readonly FakeUserRepository _users = new();
     private readonly FakeTodoListRepository _lists = new();
     private readonly FakeMemberRepository _members;
+    private readonly FakeTodoListNotifier _notifier = new();
     private readonly TestUser _currentUser = new();
     private readonly FixedTimeProvider _time = new(new DateTimeOffset(Now));
     private readonly TodoListMemberService _service;
@@ -24,7 +25,7 @@ public class TodoListMemberServiceTests
     public TodoListMemberServiceTests()
     {
         _members = new FakeMemberRepository(_lists, _users);
-        _service = new TodoListMemberService(_members, _lists, _users, _currentUser, _time);
+        _service = new TodoListMemberService(_members, _lists, _users, _notifier, _currentUser, _time);
 
         _owner = _users.Add("owner@mail.com");
         _friend = _users.Add("friend@mail.com");
@@ -441,6 +442,94 @@ public class TodoListMemberServiceTests
         Assert.Equal(TodoListAccess.Viewer, await AccessOfFriendAsync());
     }
 
+    private void AssertOnlyMemberChange(TodoListChangeKind kind)
+    {
+        var (change, recipients) = Assert.Single(_notifier.Changes);
+        Assert.Equal(new TodoListChange(_list.Id, kind, ListTitle: "Na egzamin", MemberUserId: _friend.Id), change);
+        Assert.Equal([_owner.Id, _friend.Id], recipients!);
+    }
+
+    [Fact]
+    public async Task Invite_NotifiesOnlyTheInvitedPerson()
+    {
+        await InviteAsync();
+
+        Assert.Equal((_friend.Id, _list.Id, "Na egzamin"), Assert.Single(_notifier.Invitations));
+        Assert.Empty(_notifier.Changes);
+    }
+
+    [Fact]
+    public async Task FailedInvite_NotifiesNobody()
+    {
+        await InviteAsync();
+        _notifier.Invitations.Clear();
+
+        await InviteAsync();
+        await InviteAsync("nikt@mail.com");
+        await InviteAsync("owner@mail.com");
+
+        Assert.Empty(_notifier.Invitations);
+    }
+
+    [Fact]
+    public async Task Accept_NotifiesOwnerAndNewMemberOnly()
+    {
+        await InviteAsync();
+        _currentUser.UserId = _friend.Id;
+
+        await _service.AcceptInvitationAsync(_list.Id, CancellationToken.None);
+
+        AssertOnlyMemberChange(TodoListChangeKind.MemberJoined);
+    }
+
+    [Fact]
+    public async Task Accept_Twice_NotifiesOnce()
+    {
+        await AcceptedFriendAsync();
+
+        await _service.AcceptInvitationAsync(_list.Id, CancellationToken.None);
+
+        Assert.Single(_notifier.Changes);
+    }
+
+    [Fact]
+    public async Task ChangeRole_NotifiesOwnerAndThatMemberOnly()
+    {
+        await InviteAsync();
+
+        await _service.ChangeRoleAsync(_list.Id, _friend.Id, new ChangeTodoListMemberRoleRequest(TodoListMemberRole.Editor), CancellationToken.None);
+
+        AssertOnlyMemberChange(TodoListChangeKind.MemberRoleChanged);
+    }
+
+    [Fact]
+    public async Task ChangeRole_ToSameRole_NotifiesNobody()
+    {
+        await InviteAsync();
+
+        await _service.ChangeRoleAsync(_list.Id, _friend.Id, new ChangeTodoListMemberRoleRequest(TodoListMemberRole.Viewer), CancellationToken.None);
+
+        Assert.Empty(_notifier.Changes);
+    }
+
+    [Fact]
+    public async Task Remove_NotifiesRemovedMemberEvenThoughTheyLostAccess()
+    {
+        await InviteAsync();
+
+        await _service.RemoveAsync(_list.Id, _friend.Id, CancellationToken.None);
+
+        AssertOnlyMemberChange(TodoListChangeKind.MemberRemoved);
+    }
+
+    [Fact]
+    public async Task Remove_WithoutEntry_NotifiesNobody()
+    {
+        await _service.RemoveAsync(_list.Id, _friend.Id, CancellationToken.None);
+
+        Assert.Empty(_notifier.Changes);
+    }
+
     private sealed class TestUser : ICurrentUser
     {
         public Guid UserId { get; set; }
@@ -505,6 +594,9 @@ public class TodoListMemberServiceTests
 
             return Task.FromResult(access is { } value ? new TodoListWithAccess(list, value) : null);
         }
+
+        public Task<IReadOnlyList<Guid>> GetUserIdsWithAccessAsync(Guid id, CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
 
         public Task AddAsync(TodoList list, CancellationToken cancellationToken) => throw new NotSupportedException();
 

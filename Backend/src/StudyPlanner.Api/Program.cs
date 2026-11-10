@@ -4,8 +4,10 @@ using System.Text.Json.Serialization;
 using System.Threading.RateLimiting;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
+using StudyPlanner.Api.Hubs;
 using StudyPlanner.Application.Common;
 using StudyPlanner.Application.NoteGroups;
 using StudyPlanner.Application.Notes;
@@ -71,6 +73,12 @@ builder.Services.AddScoped<TodoItemService>();
 builder.Services.AddScoped<ITodoItemRepository, EfTodoItemRepository>();
 builder.Services.AddScoped<TodoListMemberService>();
 builder.Services.AddScoped<ITodoListMemberRepository, EfTodoListMemberRepository>();
+builder.Services.AddScoped<ITodoListNotifier, SignalRTodoListNotifier>();
+
+// Ustawienia JSON kontrolerów nie obowiązują w SignalR – bez tego enumy szłyby jako liczby.
+builder.Services.AddSignalR()
+    .AddJsonProtocol(options => options.PayloadSerializerOptions.Converters.Add(new JsonStringEnumConverter(JsonNamingPolicy.CamelCase)));
+builder.Services.AddSingleton<IUserIdProvider, SubjectUserIdProvider>();
 builder.Services.AddScoped<TaskService>();
 builder.Services.AddScoped<ITaskRepository, EfTaskRepository>();
 builder.Services.AddScoped<ITagRepository, EfTagRepository>();
@@ -96,6 +104,22 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtKey)),
             ValidateIssuer = false,
             ValidateAudience = false
+        };
+
+        // Przeglądarka nie ustawi nagłówka Authorization dla WebSocketa, więc token przychodzi w adresie.
+        // Tylko na ścieżce huba – w pozostałych adresach trafiałby do logów i historii bez potrzeby.
+        options.Events = new JwtBearerEvents
+        {
+            OnMessageReceived = context =>
+            {
+                var token = context.Request.Query["access_token"];
+                if (!string.IsNullOrEmpty(token) && context.Request.Path.StartsWithSegments(TodoListHub.Path))
+                {
+                    context.Token = token;
+                }
+
+                return Task.CompletedTask;
+            },
         };
     });
 
@@ -150,5 +174,9 @@ app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapControllers();
+
+// Po wygaśnięciu tokenu połączenie się zamyka – inaczej odbierałoby zmiany dalej, bez ważnego logowania.
+app.MapHub<TodoListHub>(TodoListHub.Path, options => options.CloseOnAuthenticationExpiration = true)
+    .RequireAuthorization();
 
 app.Run();
