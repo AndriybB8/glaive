@@ -138,7 +138,7 @@ public class TaskTagServiceTests
     {
         public List<TaskItem> Tasks { get; } = [];
 
-        public Task<IReadOnlyList<TaskItem>> GetByScheduleAsync(Guid scheduleId, Guid userId, CancellationToken cancellationToken) =>
+        public Task<IReadOnlyList<TaskItem>> GetByScheduleAsync(Guid scheduleId, Guid userId, IReadOnlyList<Guid> tagIds, CancellationToken cancellationToken) =>
             Task.FromResult<IReadOnlyList<TaskItem>>(Tasks.Where(t => t.ScheduleId == scheduleId && t.UserId == userId).ToList());
 
         public Task<TaskItem?> GetByIdAsync(Guid id, Guid userId, CancellationToken cancellationToken) =>

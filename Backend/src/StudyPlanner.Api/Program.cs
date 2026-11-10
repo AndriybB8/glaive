@@ -69,6 +69,8 @@ builder.Services.AddScoped<TodoListService>();
 builder.Services.AddScoped<ITodoListRepository, EfTodoListRepository>();
 builder.Services.AddScoped<TodoItemService>();
 builder.Services.AddScoped<ITodoItemRepository, EfTodoItemRepository>();
+builder.Services.AddScoped<TodoListMemberService>();
+builder.Services.AddScoped<ITodoListMemberRepository, EfTodoListMemberRepository>();
 builder.Services.AddScoped<TaskService>();
 builder.Services.AddScoped<ITaskRepository, EfTaskRepository>();
 builder.Services.AddScoped<ITagRepository, EfTagRepository>();
@@ -113,6 +115,16 @@ builder.Services.AddRateLimiter(options =>
             factory: _ => new FixedWindowRateLimiterOptions
             {
                 PermitLimit = 5,
+                Window = TimeSpan.FromMinutes(1),
+                QueueLimit = 0,
+            }));
+
+    // Wyszukanie i zaproszenie zdradzają, czy adres ma konto. Limit po IP, bo UseRateLimiter działa przed uwierzytelnieniem.
+    options.AddPolicy("user-lookup", httpContext => RateLimitPartition.GetFixedWindowLimiter(
+            partitionKey: httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+            factory: _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 20,
                 Window = TimeSpan.FromMinutes(1),
                 QueueLimit = 0,
             }));

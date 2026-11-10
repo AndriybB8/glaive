@@ -7,26 +7,26 @@ namespace StudyPlanner.Infrastructure.TodoLists;
 
 public sealed class EfTodoItemRepository(AppDbContext db) : ITodoItemRepository
 {
-    public async Task<IReadOnlyList<TodoItem>> GetByListAsync(Guid listId, Guid userId, CancellationToken cancellationToken)
+    public async Task<IReadOnlyList<TodoItem>> GetByListAsync(Guid listId, CancellationToken cancellationToken)
     {
         return await db.TodoItems
             .AsNoTracking()
-            .Where(i => i.ListId == listId && i.UserId == userId)
+            .Where(i => i.ListId == listId)
             .ToListAsync(cancellationToken);
     }
 
-    public async Task<IReadOnlyList<TodoItem>> GetByListForUpdateAsync(Guid listId, Guid userId, CancellationToken cancellationToken)
+    public async Task<IReadOnlyList<TodoItem>> GetByListForUpdateAsync(Guid listId, CancellationToken cancellationToken)
     {
         // Śledzone przez kontekst – TodoItemService zmienia pozycje i zapisuje je przez UpdateRangeAsync.
         return await db.TodoItems
-            .Where(i => i.ListId == listId && i.UserId == userId)
+            .Where(i => i.ListId == listId)
             .ToListAsync(cancellationToken);
     }
 
-    public Task<TodoItem?> GetByIdAsync(Guid id, Guid userId, CancellationToken cancellationToken)
+    public Task<TodoItem?> GetByIdAsync(Guid id, CancellationToken cancellationToken)
     {
         // Śledzony przez kontekst – TodoItemService zmienia go i zapisuje przez UpdateAsync.
-        return db.TodoItems.FirstOrDefaultAsync(i => i.Id == id && i.UserId == userId, cancellationToken);
+        return db.TodoItems.FirstOrDefaultAsync(i => i.Id == id, cancellationToken);
     }
 
     public async Task AddAsync(TodoItem item, CancellationToken cancellationToken)

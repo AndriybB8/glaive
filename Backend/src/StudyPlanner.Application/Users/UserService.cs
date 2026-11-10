@@ -71,4 +71,21 @@ public class UserService(IUserRepository repo, IPasswordHasher hasher, ITokenGen
         GeneratedToken gt = tokenGen.GenerateToken(user.Id, user.Email);
         return UserResult<LoginResponseDto>.Success(new LoginResponseDto(gt.Token, gt.ExpiresAt));
     }
+
+    /// <summary>Aktywne konto o dokładnie tym adresie (wielkość liter bez znaczenia, adresy w bazie są małymi literami).</summary>
+    public async Task<UserResult<UserLookupDto>> LookupAsync(UserLookupRequest req, CancellationToken cancellationToken)
+    {
+        var email = req.Email?.Trim().ToLowerInvariant() ?? string.Empty;
+
+        if (email.Length == 0)
+        {
+            return UserResult<UserLookupDto>.Failure(new UserError(UserErrorType.Validation, "Podaj adres email."));
+        }
+
+        var user = await repo.GetByEmailAsync(email, cancellationToken);
+
+        return user is null || user.Status != AccountStatus.Active
+            ? UserResult<UserLookupDto>.Failure(new UserError(UserErrorType.NotFound, "Nie znaleziono użytkownika o tym adresie."))
+            : UserResult<UserLookupDto>.Success(new UserLookupDto(user.Id, user.Email));
+    }
 }

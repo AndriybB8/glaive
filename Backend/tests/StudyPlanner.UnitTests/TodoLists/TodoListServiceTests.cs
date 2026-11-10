@@ -176,6 +176,89 @@ public class TodoListServiceTests
         Assert.Single(_repository.Lists);
     }
 
+    /// <summary>Lista innej osoby, udostępniona bieżącemu użytkownikowi.</summary>
+    private TodoList SharedList(TodoListMemberRole role, bool accepted = true, string title = "Cudza lista")
+    {
+        var list = TodoList.Create(Guid.NewGuid(), title, DateTime.UtcNow);
+        _repository.Lists.Add(list);
+
+        var member = TodoListMember.Invite(list.Id, UserId, role, DateTime.UtcNow);
+        if (accepted)
+        {
+            member.Accept(DateTime.UtcNow);
+        }
+
+        _repository.Members.Add(member);
+        return list;
+    }
+
+    [Fact]
+    public async Task OwnList_HasOwnerAccess()
+    {
+        var created = await CreateAsync();
+
+        var byId = await _service.GetByIdAsync(created.Id, CancellationToken.None);
+        var all = await _service.GetAllAsync(CancellationToken.None);
+
+        Assert.Equal(TodoListAccess.Owner, created.Access);
+        Assert.Equal(TodoListAccess.Owner, byId.Value!.Access);
+        Assert.Equal(TodoListAccess.Owner, all.Single().Access);
+    }
+
+    [Theory]
+    [InlineData(TodoListMemberRole.Viewer, TodoListAccess.Viewer)]
+    [InlineData(TodoListMemberRole.Editor, TodoListAccess.Editor)]
+    public async Task SharedList_IsVisibleWithAccessFromRole(TodoListMemberRole role, TodoListAccess expected)
+    {
+        var shared = SharedList(role);
+
+        var byId = await _service.GetByIdAsync(shared.Id, CancellationToken.None);
+        var all = await _service.GetAllAsync(CancellationToken.None);
+
+        Assert.Equal(expected, byId.Value!.Access);
+        Assert.Equal(expected, all.Single().Access);
+    }
+
+    [Fact]
+    public async Task SharedList_WithPendingInvitation_IsNotVisible()
+    {
+        var pending = SharedList(TodoListMemberRole.Editor, accepted: false);
+
+        var byId = await _service.GetByIdAsync(pending.Id, CancellationToken.None);
+        var all = await _service.GetAllAsync(CancellationToken.None);
+
+        Assert.Equal(TodoListErrorType.NotFound, byId.Error!.Type);
+        Assert.Empty(all);
+    }
+
+    [Theory]
+    [InlineData(TodoListMemberRole.Viewer)]
+    [InlineData(TodoListMemberRole.Editor)]
+    public async Task SharedList_OnlyOwnerCanRenameOrDelete(TodoListMemberRole role)
+    {
+        var shared = SharedList(role, title: "Oryginalna");
+
+        var rename = await _service.UpdateAsync(shared.Id, new UpdateTodoListRequest("Zmieniona", shared.Version), CancellationToken.None);
+        var delete = await _service.DeleteAsync(shared.Id, CancellationToken.None);
+
+        Assert.Equal(TodoListErrorType.Forbidden, rename.Error!.Type);
+        Assert.Equal(TodoListErrorType.Forbidden, delete.Error!.Type);
+        Assert.Equal("Oryginalna", shared.Title);
+        Assert.Contains(shared, _repository.Lists);
+    }
+
+    [Fact]
+    public async Task SharedList_WithPendingInvitation_RenameAndDeleteAreNotFound()
+    {
+        var pending = SharedList(TodoListMemberRole.Editor, accepted: false);
+
+        var rename = await _service.UpdateAsync(pending.Id, new UpdateTodoListRequest("Zmieniona", pending.Version), CancellationToken.None);
+        var delete = await _service.DeleteAsync(pending.Id, CancellationToken.None);
+
+        Assert.Equal(TodoListErrorType.NotFound, rename.Error!.Type);
+        Assert.Equal(TodoListErrorType.NotFound, delete.Error!.Type);
+    }
+
     private sealed class TestUser(Guid userId) : ICurrentUser
     {
         public Guid UserId => userId;
@@ -197,20 +280,31 @@ public class TodoListServiceTests
         /// <summary>Punkty – tylko do liczników w GetSummariesByUserAsync.</summary>
         public List<TodoItem> Items { get; } = [];
 
+        public List<TodoListMember> Members { get; } = [];
+
         public Task<IReadOnlyList<TodoListSummary>> GetSummariesByUserAsync(Guid userId, CancellationToken cancellationToken) =>
             Task.FromResult<IReadOnlyList<TodoListSummary>>(Lists
-                .Where(l => l.UserId == userId)
+                .Where(l => AccessOf(l, userId) is not null)
                 .Select(l => new TodoListSummary(
                     l,
                     Items.Count(i => i.ListId == l.Id),
-                    Items.Count(i => i.ListId == l.Id && i.IsDone)))
+                    Items.Count(i => i.ListId == l.Id && i.IsDone),
+                    AccessOf(l, userId)!.Value))
                 .ToList());
 
-        public Task<TodoList?> GetByIdAsync(Guid id, Guid userId, CancellationToken cancellationToken) =>
-            Task.FromResult(Lists.FirstOrDefault(l => l.Id == id && l.UserId == userId));
+        public Task<TodoListWithAccess?> GetWithAccessAsync(Guid id, Guid userId, CancellationToken cancellationToken)
+        {
+            var list = Lists.FirstOrDefault(l => l.Id == id);
 
-        public Task<bool> ExistsAsync(Guid id, Guid userId, CancellationToken cancellationToken) =>
-            Task.FromResult(Lists.Any(l => l.Id == id && l.UserId == userId));
+            return Task.FromResult(list is not null && AccessOf(list, userId) is { } access
+                ? new TodoListWithAccess(list, access)
+                : null);
+        }
+
+        private TodoListAccess? AccessOf(TodoList list, Guid userId) =>
+            list.UserId == userId
+                ? TodoListAccess.Owner
+                : Members.FirstOrDefault(m => m.ListId == list.Id && m.UserId == userId && m.AcceptedAt != null)?.Role.ToAccess();
 
         public Task AddAsync(TodoList list, CancellationToken cancellationToken)
         {

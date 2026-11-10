@@ -2,7 +2,8 @@ namespace StudyPlanner.Application.Users;
 
 public enum UserErrorType
 {
-    Validation = 0
+    Validation = 0,
+    NotFound
 }
 
 public sealed record UserError(UserErrorType Type, string Message);

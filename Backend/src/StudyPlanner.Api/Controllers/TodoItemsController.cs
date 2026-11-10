@@ -72,6 +72,7 @@ public sealed class TodoItemsController(TodoItemService todoItemService) : Contr
         {
             TodoItemErrorType.NotFound => StatusCodes.Status404NotFound,
             TodoItemErrorType.Conflict => StatusCodes.Status409Conflict,
+            TodoItemErrorType.Forbidden => StatusCodes.Status403Forbidden,
             _ => StatusCodes.Status400BadRequest,
         };
 

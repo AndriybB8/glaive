@@ -4,14 +4,17 @@ namespace StudyPlanner.Application.TodoLists;
 
 public interface ITodoListRepository
 {
-    /// <summary>Listy użytkownika razem z liczbą punktów – jednym zapytaniem, bez wczytywania samych punktów.</summary>
+    /// <summary>
+    /// Listy użytkownika i listy udostępnione mu po przyjęciu zaproszenia, razem z liczbą punktów –
+    /// jednym zapytaniem, bez wczytywania samych punktów.
+    /// </summary>
     Task<IReadOnlyList<TodoListSummary>> GetSummariesByUserAsync(Guid userId, CancellationToken cancellationToken);
 
-    /// <summary>Zwraca listę tylko wtedy, gdy należy do podanego użytkownika.</summary>
-    Task<TodoList?> GetByIdAsync(Guid id, Guid userId, CancellationToken cancellationToken);
-
-    /// <summary>Czy lista istnieje i należy do użytkownika (np. przed dodaniem do niej punktu).</summary>
-    Task<bool> ExistsAsync(Guid id, Guid userId, CancellationToken cancellationToken);
+    /// <summary>
+    /// Lista z dostępem użytkownika. Null, gdy listy nie ma, użytkownik nie ma do niej dostępu
+    /// albo nie przyjął jeszcze zaproszenia. To jedyne miejsce, które ustala dostęp do listy.
+    /// </summary>
+    Task<TodoListWithAccess?> GetWithAccessAsync(Guid id, Guid userId, CancellationToken cancellationToken);
 
     Task AddAsync(TodoList list, CancellationToken cancellationToken);
 
@@ -27,7 +30,8 @@ public interface ITodoListRepository
 
 /// <param name="ItemCount">Wszystkie punkty listy.</param>
 /// <param name="DoneCount">Punkty oznaczone jako zrobione.</param>
-public sealed record TodoListSummary(TodoList List, int ItemCount, int DoneCount);
+/// <param name="Access">Dostęp użytkownika, dla którego pobrano listę.</param>
+public sealed record TodoListSummary(TodoList List, int ItemCount, int DoneCount, TodoListAccess Access);
 
 /// <summary>
 /// Rzucany przez repozytorium przy konflikcie wersji

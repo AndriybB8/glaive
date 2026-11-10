@@ -5,6 +5,7 @@ public enum TodoItemErrorType
     NotFound,
     Validation,
     Conflict,
+    Forbidden,
 }
 
 /// <param name="Current">Przy konflikcie: aktualna wersja punktu z serwera.</param>

@@ -56,6 +56,7 @@ public sealed class TodoListsController(TodoListService todoListService) : Contr
         {
             TodoListErrorType.NotFound => StatusCodes.Status404NotFound,
             TodoListErrorType.Conflict => StatusCodes.Status409Conflict,
+            TodoListErrorType.Forbidden => StatusCodes.Status403Forbidden,
             _ => StatusCodes.Status400BadRequest,
         };
 

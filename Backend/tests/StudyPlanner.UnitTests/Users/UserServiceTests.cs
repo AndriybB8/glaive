@@ -91,6 +91,49 @@ public class UserServiceTests
         Assert.Equal(UserErrorType.Validation, result.Error!.Type);
     }
 
+    [Fact]
+    public async Task Lookup_FindsActiveAccountIgnoringCaseAndSpaces()
+    {
+        var registered = await _service.RegisterAsync(new RegisterRequest("test@mail.com", "haslo123"), CancellationToken.None);
+
+        var result = await _service.LookupAsync(new UserLookupRequest("  TEST@Mail.com "), CancellationToken.None);
+
+        Assert.Equal(registered.Value!.Id, result.Value!.Id);
+        Assert.Equal("test@mail.com", result.Value.Email);
+    }
+
+    [Fact]
+    public async Task Lookup_MatchesOnlyWholeEmail()
+    {
+        await _service.RegisterAsync(new RegisterRequest("test@mail.com", "haslo123"), CancellationToken.None);
+
+        var result = await _service.LookupAsync(new UserLookupRequest("test@"), CancellationToken.None);
+
+        Assert.Equal(UserErrorType.NotFound, result.Error!.Type);
+    }
+
+    [Fact]
+    public async Task Lookup_DisabledAccount_IsNotFound()
+    {
+        await _service.RegisterAsync(new RegisterRequest("test@mail.com", "haslo123"), CancellationToken.None);
+        // Konta nie da się jeszcze wyłączyć przez API domeny.
+        typeof(User).GetProperty(nameof(User.Status))!.SetValue(_repo.Users.Single(), AccountStatus.Disabled);
+
+        var result = await _service.LookupAsync(new UserLookupRequest("test@mail.com"), CancellationToken.None);
+
+        Assert.Equal(UserErrorType.NotFound, result.Error!.Type);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("   ")]
+    public async Task Lookup_RequiresEmail(string? email)
+    {
+        var result = await _service.LookupAsync(new UserLookupRequest(email), CancellationToken.None);
+
+        Assert.Equal(UserErrorType.Validation, result.Error!.Type);
+    }
+
     private sealed class FixedTimeProvider(DateTimeOffset now) : TimeProvider
     {
         private DateTimeOffset _now = now;
