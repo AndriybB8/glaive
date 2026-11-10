@@ -113,3 +113,26 @@ export function ChecklistIcon() {
     </Icon>
   )
 }
+
+/** Dwie osoby – lista udostępniona innym. */
+export function UsersIcon() {
+  return (
+    <Icon>
+      <circle cx="7.5" cy="7" r="2.5" />
+      <path d="M3 16c0-2.5 2-4.5 4.5-4.5S12 13.5 12 16" />
+      <path d="M13 4.8a2.5 2.5 0 0 1 0 4.4" />
+      <path d="M14.5 11.8c1.5.6 2.5 2.2 2.5 4.2" />
+    </Icon>
+  )
+}
+
+/** Osoba z plusem – udostępnianie (zaproszenie kolejnej osoby). */
+export function UserPlusIcon() {
+  return (
+    <Icon>
+      <circle cx="8" cy="7" r="2.5" />
+      <path d="M3.5 16c0-2.5 2-4.5 4.5-4.5s4.5 2 4.5 4.5" />
+      <path d="M15.5 6v5M13 8.5h5" />
+    </Icon>
+  )
+}

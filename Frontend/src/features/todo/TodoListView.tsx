@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useRef, useState, type SubmitEvent } from 'react'
 import { Alert } from '../../components/ui/Alert'
+import { Badge } from '../../components/ui/Badge'
 import { Button } from '../../components/ui/Button'
 import { IconButton } from '../../components/ui/IconButton'
-import { PencilIcon, TrashIcon } from '../../components/ui/icons'
+import { PencilIcon, TrashIcon, UserPlusIcon } from '../../components/ui/icons'
 import { ProgressBar } from '../../components/ui/ProgressBar'
 import { ApiError } from '../../lib/http'
 import {
@@ -15,6 +16,7 @@ import {
   setTodoItemDone,
   updateTodoItem,
 } from './api'
+import { ACCESS_LABELS } from './sharingApi'
 import { TodoItemRow } from './TodoItemRow'
 import type { TodoItem, TodoListSummary } from './types'
 
@@ -40,12 +42,23 @@ interface TodoListViewProps {
   onCountsChange: (listId: string, itemCount: number, doneCount: number) => void
   onRename: () => void
   onDelete: () => void
+  /** Okno udostępniania – tylko właściciel. */
+  onShare: () => void
+  /** Opuszczenie cudzej (udostępnionej) listy. */
+  onLeave: () => void
+  /** Serwer odmówił (403) – uprawnienia do listy zmieniły się w międzyczasie; panel list powinien je wczytać od nowa. */
+  onAccessChanged: () => void
   onBack: () => void
 }
 
-/** Punkty jednej listy: dodawanie, odhaczanie, edycja, usuwanie i zmiana kolejności. */
-export function TodoListView({ list, onCountsChange, onRename, onDelete, onBack }: TodoListViewProps) {
+/**
+ * Punkty jednej listy: dodawanie, odhaczanie, edycja, usuwanie i zmiana kolejności.
+ * Na udostępnionej liście z uprawnieniem „Podgląd” punkty są tylko do odczytu.
+ */
+export function TodoListView({ list, onCountsChange, onRename, onDelete, onShare, onLeave, onAccessChanged, onBack }: TodoListViewProps) {
   const listId = list.id
+  const isOwner = list.access === 'owner'
+  const readOnly = list.access === 'viewer'
   const [items, setItems] = useState<TodoItem[] | null>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [actionError, setActionError] = useState<string | null>(null)
@@ -105,10 +118,19 @@ export function TodoListView({ list, onCountsChange, onRename, onDelete, onBack 
       setActionError('Ten punkt został w międzyczasie usunięty.')
     } else if (error instanceof ApiError && error.status === 400) {
       setActionError(error.message)
+    } else if (error instanceof ApiError && error.status === 403) {
+      handleForbidden(error)
     } else {
       setActionError(fallback)
       void loadItems()
     }
+  }
+
+  /** Właściciel zmienił nam uprawnienia na „Podgląd” – pokazujemy komunikat serwera i aktualny stan listy. */
+  const handleForbidden = (error: ApiError) => {
+    setActionError(error.message)
+    onAccessChanged()
+    void loadItems()
   }
 
   const handleAdd = async (event: SubmitEvent<HTMLFormElement>) => {
@@ -124,6 +146,7 @@ export function TodoListView({ list, onCountsChange, onRename, onDelete, onBack 
       setNewTitle('')
     } catch (error) {
       if (error instanceof ApiError && error.status === 400) setActionError(error.message)
+      else if (error instanceof ApiError && error.status === 403) handleForbidden(error)
       else if (error instanceof ApiError && error.status === 404) setActionError('Ta lista została w międzyczasie usunięta.')
       else setActionError('Nie udało się dodać punktu.')
     } finally {
@@ -185,15 +208,18 @@ export function TodoListView({ list, onCountsChange, onRename, onDelete, onBack 
         const saved = await reorderTodoItems(listId, ids)
         applyItems((current) => (current ? mergeItems(current, saved) : current))
       } catch (error) {
+        if (error instanceof ApiError && error.status === 403) onAccessChanged()
         setActionError(
-          error instanceof ApiError && error.status === 409
+          error instanceof ApiError && error.status === 403
+            ? error.message
+            : error instanceof ApiError && error.status === 409
             ? 'Lista zmieniła się w międzyczasie w innym miejscu – wczytałem aktualną kolejność.'
             : 'Nie udało się zapisać kolejności.',
         )
         await loadItems()
       }
     })
-  }, [listId, applyItems, loadItems])
+  }, [listId, applyItems, loadItems, onAccessChanged])
 
   const handleMove = (from: number, to: number) => {
     const current = itemsRef.current
@@ -242,13 +268,30 @@ export function TodoListView({ list, onCountsChange, onRename, onDelete, onBack 
         </button>
         <div className="flex items-start gap-2">
           <h2 className="min-w-0 flex-1 text-2xl font-bold tracking-tight break-words text-slate-900">{list.title}</h2>
-          <IconButton label={`Zmień nazwę listy ${list.title}`} title="Zmień nazwę" touch onClick={onRename}>
-            <PencilIcon />
-          </IconButton>
-          <IconButton label={`Usuń listę ${list.title}`} title="Usuń listę" tone="danger" touch onClick={onDelete}>
-            <TrashIcon />
-          </IconButton>
+          {isOwner ? (
+            <>
+              <IconButton label={`Udostępnij listę ${list.title}`} title="Udostępnij" touch onClick={onShare}>
+                <UserPlusIcon />
+              </IconButton>
+              <IconButton label={`Zmień nazwę listy ${list.title}`} title="Zmień nazwę" touch onClick={onRename}>
+                <PencilIcon />
+              </IconButton>
+              <IconButton label={`Usuń listę ${list.title}`} title="Usuń listę" tone="danger" touch onClick={onDelete}>
+                <TrashIcon />
+              </IconButton>
+            </>
+          ) : (
+            <Button variant="ghost-danger" onClick={onLeave} className="min-h-11 shrink-0 sm:min-h-8">
+              Opuść listę
+            </Button>
+          )}
         </div>
+        {!isOwner && (
+          <p className="flex flex-wrap items-center gap-2 text-sm text-slate-600">
+            <Badge tone="blue">Udostępniona · {ACCESS_LABELS[list.access]}</Badge>
+            {readOnly ? 'Możesz tylko przeglądać tę listę.' : 'Możesz dodawać i zmieniać punkty.'}
+          </p>
+        )}
         <div className="flex flex-col gap-1.5">
           <p className="text-sm text-slate-600">
             {itemCount === 0 ? 'Brak punktów' : `Zrobione: ${doneCount} z ${itemCount}`}
@@ -257,21 +300,23 @@ export function TodoListView({ list, onCountsChange, onRename, onDelete, onBack 
         </div>
       </header>
 
-      <form onSubmit={(event) => void handleAdd(event)} className="flex gap-2">
-        <input
-          ref={addInputRef}
-          value={newTitle}
-          onChange={(event) => setNewTitle(event.target.value)}
-          maxLength={TODO_ITEM_TITLE_MAX_LENGTH}
-          placeholder="Dodaj punkt, np. Powtórzyć normalizację"
-          aria-label="Nowy punkt"
-          autoComplete="off"
-          className="h-11 min-w-0 flex-1 rounded-md border border-slate-300 bg-white px-3 text-base text-slate-900 placeholder:text-slate-500 focus:border-blue-600 focus:outline-2 focus:-outline-offset-1 focus:outline-blue-600 sm:h-10 sm:text-sm"
-        />
-        <Button type="submit" disabled={adding || !newTitle.trim()} className="min-h-11 sm:min-h-10">
-          {adding ? 'Dodawanie…' : 'Dodaj'}
-        </Button>
-      </form>
+      {!readOnly && (
+        <form onSubmit={(event) => void handleAdd(event)} className="flex gap-2">
+          <input
+            ref={addInputRef}
+            value={newTitle}
+            onChange={(event) => setNewTitle(event.target.value)}
+            maxLength={TODO_ITEM_TITLE_MAX_LENGTH}
+            placeholder="Dodaj punkt, np. Powtórzyć normalizację"
+            aria-label="Nowy punkt"
+            autoComplete="off"
+            className="h-11 min-w-0 flex-1 rounded-md border border-slate-300 bg-white px-3 text-base text-slate-900 placeholder:text-slate-500 focus:border-blue-600 focus:outline-2 focus:-outline-offset-1 focus:outline-blue-600 sm:h-10 sm:text-sm"
+          />
+          <Button type="submit" disabled={adding || !newTitle.trim()} className="min-h-11 sm:min-h-10">
+            {adding ? 'Dodawanie…' : 'Dodaj'}
+          </Button>
+        </form>
+      )}
 
       {actionError && <Alert tone="error">{actionError}</Alert>}
 
@@ -285,7 +330,7 @@ export function TodoListView({ list, onCountsChange, onRename, onDelete, onBack 
       ) : items === null ? (
         <p className="text-sm text-slate-500">Wczytywanie…</p>
       ) : items.length === 0 ? (
-        <p className="text-sm text-slate-600">Lista jest pusta. Dodaj pierwszy punkt polem powyżej.</p>
+        <p className="text-sm text-slate-600">{readOnly ? 'Lista jest pusta.' : 'Lista jest pusta. Dodaj pierwszy punkt polem powyżej.'}</p>
       ) : (
         <>
           <ul aria-label={`Punkty listy ${list.title}`} className="flex flex-col gap-1.5">
@@ -296,6 +341,7 @@ export function TodoListView({ list, onCountsChange, onRename, onDelete, onBack 
                 index={index}
                 count={items.length}
                 dragging={item.id === draggedId}
+                readOnly={readOnly}
                 onToggle={(i) => void handleToggle(i)}
                 onRename={handleRename}
                 onDelete={(i) => void handleDelete(i)}
@@ -306,9 +352,11 @@ export function TodoListView({ list, onCountsChange, onRename, onDelete, onBack 
               />
             ))}
           </ul>
-          <p className="text-xs text-slate-500">
-            Kliknij treść, aby ją edytować. Kolejność zmienisz strzałkami albo przeciągając punkt (na komputerze).
-          </p>
+          {!readOnly && (
+            <p className="text-xs text-slate-500">
+              Kliknij treść, aby ją edytować. Kolejność zmienisz strzałkami albo przeciągając punkt (na komputerze).
+            </p>
+          )}
         </>
       )}
     </article>

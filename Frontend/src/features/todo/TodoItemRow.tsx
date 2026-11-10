@@ -10,6 +10,8 @@ interface TodoItemRowProps {
   count: number
   /** Ten punkt jest właśnie przeciągany. */
   dragging: boolean
+  /** Tylko podgląd (lista udostępniona z uprawnieniem „Podgląd”) – bez odhaczania, edycji, przestawiania i usuwania. */
+  readOnly?: boolean
   onToggle: (item: TodoItem) => void
   /** Zwraca false, gdy zapis się nie udał – wtedy pole edycji zostaje otwarte. */
   onRename: (item: TodoItem, title: string) => Promise<boolean>
@@ -29,6 +31,7 @@ export function TodoItemRow({
   index,
   count,
   dragging,
+  readOnly = false,
   onToggle,
   onRename,
   onDelete,
@@ -85,7 +88,7 @@ export function TodoItemRow({
 
   return (
     <li
-      draggable={!editing}
+      draggable={!editing && !readOnly}
       onDragStart={handleDragStart}
       onDragOver={handleDragOver}
       onDrop={(event) => event.preventDefault()}
@@ -94,17 +97,20 @@ export function TodoItemRow({
         dragging ? 'border-blue-300 opacity-50' : 'border-slate-200'
       }`}
     >
-      <span className="hidden shrink-0 cursor-grab text-slate-400 active:cursor-grabbing sm:block" title="Przeciągnij, aby zmienić kolejność" aria-hidden>
-        <GripIcon />
-      </span>
+      {!readOnly && (
+        <span className="hidden shrink-0 cursor-grab text-slate-400 active:cursor-grabbing sm:block" title="Przeciągnij, aby zmienić kolejność" aria-hidden>
+          <GripIcon />
+        </span>
+      )}
 
       <span className="flex size-11 shrink-0 items-center justify-center sm:size-8">
         <input
           type="checkbox"
           checked={item.isDone}
           onChange={() => onToggle(item)}
+          disabled={readOnly}
           aria-label={`Zrobione: ${item.title}`}
-          className="size-5 cursor-pointer accent-blue-600"
+          className="size-5 cursor-pointer accent-blue-600 disabled:cursor-default"
         />
       </span>
 
@@ -120,6 +126,10 @@ export function TodoItemRow({
           autoFocus
           className="min-h-9 min-w-0 flex-1 rounded-md border border-blue-600 px-2 text-sm outline-2 -outline-offset-1 outline-blue-600"
         />
+      ) : readOnly ? (
+        <span className={`min-w-0 flex-1 px-1 py-2 text-sm break-words ${item.isDone ? 'text-slate-400 line-through' : 'text-slate-900'}`}>
+          {item.title}
+        </span>
       ) : (
         <button
           type="button"
@@ -134,23 +144,25 @@ export function TodoItemRow({
         </button>
       )}
 
-      <div className="flex shrink-0 items-center">
-        <IconButton label={`Przesuń wyżej: ${item.title}`} title="Przesuń wyżej" touch disabled={index === 0} onClick={() => onMove(index, index - 1)}>
-          <ChevronUpIcon />
-        </IconButton>
-        <IconButton
-          label={`Przesuń niżej: ${item.title}`}
-          title="Przesuń niżej"
-          touch
-          disabled={index === count - 1}
-          onClick={() => onMove(index, index + 1)}
-        >
-          <ChevronDownIcon />
-        </IconButton>
-        <IconButton label={`Usuń: ${item.title}`} title="Usuń" tone="danger" touch onClick={() => onDelete(item)}>
-          <TrashIcon />
-        </IconButton>
-      </div>
+      {!readOnly && (
+        <div className="flex shrink-0 items-center">
+          <IconButton label={`Przesuń wyżej: ${item.title}`} title="Przesuń wyżej" touch disabled={index === 0} onClick={() => onMove(index, index - 1)}>
+            <ChevronUpIcon />
+          </IconButton>
+          <IconButton
+            label={`Przesuń niżej: ${item.title}`}
+            title="Przesuń niżej"
+            touch
+            disabled={index === count - 1}
+            onClick={() => onMove(index, index + 1)}
+          >
+            <ChevronDownIcon />
+          </IconButton>
+          <IconButton label={`Usuń: ${item.title}`} title="Usuń" tone="danger" touch onClick={() => onDelete(item)}>
+            <TrashIcon />
+          </IconButton>
+        </div>
+      )}
     </li>
   )
 }

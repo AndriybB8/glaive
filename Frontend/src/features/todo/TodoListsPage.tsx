@@ -1,14 +1,24 @@
 import { useCallback, useEffect, useState } from 'react'
-import { ChecklistIcon } from '../../components/ui/icons'
+import { ChecklistIcon, UsersIcon } from '../../components/ui/icons'
 import { getTodoLists } from './api'
 import { DeleteTodoListDialog } from './DeleteTodoListDialog'
+import { LeaveTodoListDialog } from './LeaveTodoListDialog'
+import { ShareTodoListDialog } from './ShareTodoListDialog'
+import { ACCESS_LABELS, getTodoListInvitations } from './sharingApi'
+import { TodoInvitations } from './TodoInvitations'
 import { TodoListFormDialog } from './TodoListFormDialog'
 import { TodoListView } from './TodoListView'
-import type { TodoList, TodoListSummary } from './types'
+import type { TodoList, TodoListInvitation, TodoListSummary } from './types'
 
 const LOAD_ERROR = 'Nie udało się wczytać list. Sprawdź, czy backend jest uruchomiony.'
 
-type OpenDialog = { kind: 'create' } | { kind: 'rename'; list: TodoListSummary } | { kind: 'delete'; list: TodoListSummary } | null
+type OpenDialog =
+  | { kind: 'create' }
+  | { kind: 'rename'; list: TodoListSummary }
+  | { kind: 'delete'; list: TodoListSummary }
+  | { kind: 'share'; list: TodoListSummary }
+  | { kind: 'leave'; list: TodoListSummary }
+  | null
 
 /** Ta sama kolejność co z backendu (TodoListService): alfabetycznie, przy równych nazwach – starsze pierwsze. */
 function sortLists(lists: TodoListSummary[]): TodoListSummary[] {
@@ -23,6 +33,7 @@ export function TodoListsPage() {
   const [listError, setListError] = useState<string | null>(null)
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [dialog, setDialog] = useState<OpenDialog>(null)
+  const [invitations, setInvitations] = useState<TodoListInvitation[]>([])
   const selected = lists?.find((l) => l.id === selectedId) ?? null
 
   const loadLists = useCallback(async () => {
@@ -33,6 +44,33 @@ export function TodoListsPage() {
       setListError(LOAD_ERROR)
     }
   }, [])
+
+  /** Zaproszenia to dodatek do panelu – błąd wczytania po cichu zostawia poprzedni stan. */
+  const loadInvitations = useCallback(async () => {
+    try {
+      setInvitations(await getTodoListInvitations())
+    } catch {
+      // Spróbujemy ponownie przy następnym powrocie do karty.
+    }
+  }, [])
+
+  // Zaproszenia przychodzą od innych osób, więc sprawdzamy je też po powrocie do karty.
+  useEffect(() => {
+    let ignore = false
+    getTodoListInvitations()
+      .then((result) => {
+        if (!ignore) setInvitations(result)
+      })
+      .catch(() => undefined)
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') void loadInvitations()
+    }
+    document.addEventListener('visibilitychange', handleVisibility)
+    return () => {
+      ignore = true
+      document.removeEventListener('visibilitychange', handleVisibility)
+    }
+  }, [loadInvitations])
 
   useEffect(() => {
     let ignore = false
@@ -79,6 +117,23 @@ export function TodoListsPage() {
     setDialog(null)
   }
 
+  /** Przyjęte zaproszenie: lista jest już nasza (z dostępem) – wczytujemy listy i od razu ją otwieramy. */
+  const handleInvitationAccepted = async (invitation: TodoListInvitation) => {
+    setInvitations((current) => current.filter((i) => i.listId !== invitation.listId))
+    await loadLists()
+    setSelectedId(invitation.listId)
+  }
+
+  /** Uprawnienia do listy zmieniły się w innym miejscu (403) albo lista zniknęła – wczytujemy listy od nowa. */
+  const handleAccessChanged = useCallback(() => {
+    void loadLists()
+  }, [loadLists])
+
+  const handleShareListGone = useCallback(() => {
+    setDialog(null)
+    void loadLists()
+  }, [loadLists])
+
   const handleChangedElsewhere = (current: TodoList | { deletedId: string }) => {
     if ('deletedId' in current) removeList(current.deletedId)
     else upsertList(current)
@@ -99,6 +154,12 @@ export function TodoListsPage() {
             Nowa lista
           </button>
         </div>
+
+        <TodoInvitations
+          invitations={invitations}
+          onAccepted={(invitation) => void handleInvitationAccepted(invitation)}
+          onRemoved={(listId) => setInvitations((current) => current.filter((i) => i.listId !== listId))}
+        />
 
         <nav aria-label="Listy rzeczy do zrobienia" className="min-h-0 flex-1 overflow-y-auto px-2 pb-4">
           {listError ? (
@@ -133,6 +194,12 @@ export function TodoListsPage() {
                         <ChecklistIcon />
                       </span>
                       <span className="min-w-0 flex-1 truncate">{l.title}</span>
+                      {l.access !== 'owner' && (
+                        <span className="shrink-0 text-slate-400" title={`Udostępniona · ${ACCESS_LABELS[l.access]}`}>
+                          <UsersIcon />
+                          <span className="sr-only">Udostępniona, {ACCESS_LABELS[l.access]}</span>
+                        </span>
+                      )}
                       <span className={`shrink-0 text-xs tabular-nums ${allDone ? 'font-medium text-emerald-700' : 'text-slate-500'}`}>
                         {l.doneCount}/{l.itemCount}
                       </span>
@@ -153,6 +220,9 @@ export function TodoListsPage() {
             onCountsChange={handleCountsChange}
             onRename={() => setDialog({ kind: 'rename', list: selected })}
             onDelete={() => setDialog({ kind: 'delete', list: selected })}
+            onShare={() => setDialog({ kind: 'share', list: selected })}
+            onLeave={() => setDialog({ kind: 'leave', list: selected })}
+            onAccessChanged={handleAccessChanged}
             onBack={() => setSelectedId(null)}
           />
         ) : (
@@ -166,6 +236,19 @@ export function TodoListsPage() {
           onClose={() => setDialog(null)}
           onSaved={handleSaved}
           onChangedElsewhere={handleChangedElsewhere}
+        />
+      )}
+      {dialog?.kind === 'share' && (
+        <ShareTodoListDialog list={dialog.list} onClose={() => setDialog(null)} onListGone={handleShareListGone} />
+      )}
+      {dialog?.kind === 'leave' && (
+        <LeaveTodoListDialog
+          list={dialog.list}
+          onClose={() => setDialog(null)}
+          onLeft={(id) => {
+            removeList(id)
+            setDialog(null)
+          }}
         />
       )}
       {dialog?.kind === 'delete' && (
