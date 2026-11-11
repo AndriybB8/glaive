@@ -1,9 +1,12 @@
-import type { Editor } from '@tiptap/react'
+import { generateJSON, type Editor } from '@tiptap/react'
 import { useCallback, useId, useRef, useState } from 'react'
 import { ApiError } from '../../lib/http'
+import { downloadPdf, toPdfFileName } from '../../lib/pdf'
 import { NoteTasksSection } from '../noteTasks/NoteTasksSection'
 import { NoteEditor } from './NoteEditor'
 import { formatUpdatedAt } from './formatDate'
+import { createNoteExtensions } from './noteExtensions'
+import { createNotePdf } from './notePdf'
 import { useNoteAutosave, type SaveStatus } from './useNoteAutosave'
 import type { Note, NoteGroup } from './types'
 
@@ -45,6 +48,25 @@ export function NoteEditorPanel({ note, onSaved, onDelete, onReplace, onBack, gr
     editorRef.current = editor
   }, [])
 
+  const [exporting, setExporting] = useState(false)
+  const [exportError, setExportError] = useState<string | null>(null)
+
+  /** PDF z tego, co widać na ekranie – także z niezapisanymi jeszcze zmianami. */
+  const handleExportPdf = async () => {
+    setExporting(true)
+    setExportError(null)
+    try {
+      const doc = editorRef.current?.getJSON() ?? generateJSON(note.content || '<p></p>', createNoteExtensions())
+      const groupName = groups?.find((g) => g.id === note.groupId)?.name ?? null
+      const updatedAt = status === 'saved' ? lastSavedAt : new Date().toISOString()
+      await downloadPdf(createNotePdf({ title, doc, updatedAt, groupName }), toPdfFileName(title, 'notatka'))
+    } catch {
+      setExportError('Nie udało się wygenerować pliku PDF. Spróbuj ponownie.')
+    } finally {
+      setExporting(false)
+    }
+  }
+
   return (
     <article className="mx-auto flex w-full max-w-3xl flex-1 flex-col px-5 pb-16 sm:px-8">
       <header className="flex items-center gap-3 py-4 text-sm">
@@ -63,12 +85,26 @@ export function NoteEditorPanel({ note, onSaved, onDelete, onReplace, onBack, gr
         </p>
         <button
           type="button"
+          onClick={() => void handleExportPdf()}
+          disabled={exporting}
+          className="rounded-md px-2 py-1 text-slate-600 hover:bg-slate-100 focus-visible:outline-2 focus-visible:outline-blue-600 disabled:cursor-wait disabled:opacity-60"
+        >
+          {exporting ? 'Generowanie…' : 'Pobierz PDF'}
+        </button>
+        <button
+          type="button"
           onClick={onDelete}
           className="rounded-md px-2 py-1 text-slate-500 hover:bg-red-50 hover:text-red-700 focus-visible:outline-2 focus-visible:outline-blue-600"
         >
           Usuń
         </button>
       </header>
+
+      {exportError && (
+        <p role="alert" className="mb-3 text-sm text-red-700">
+          {exportError}
+        </p>
+      )}
 
       {conflict && (
         <div role="alert" className="mb-4 rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900">
