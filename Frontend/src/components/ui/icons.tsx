@@ -136,3 +136,13 @@ export function UserPlusIcon() {
     </Icon>
   )
 }
+
+export function DownloadIcon() {
+  return (
+    <Icon>
+      <path d="M10 3.5v9" />
+      <path d="M6.5 9 10 12.5 13.5 9" />
+      <path d="M4 14.5v2h12v-2" />
+    </Icon>
+  )
+}

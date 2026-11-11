@@ -3,9 +3,10 @@ import { Alert } from '../../components/ui/Alert'
 import { Badge } from '../../components/ui/Badge'
 import { Button } from '../../components/ui/Button'
 import { IconButton } from '../../components/ui/IconButton'
-import { PencilIcon, TrashIcon, UserPlusIcon } from '../../components/ui/icons'
+import { DownloadIcon, PencilIcon, TrashIcon, UserPlusIcon } from '../../components/ui/icons'
 import { ProgressBar } from '../../components/ui/ProgressBar'
 import { ApiError } from '../../lib/http'
+import { downloadPdf, toPdfFileName } from '../../lib/pdf'
 import {
   TODO_ITEM_TITLE_MAX_LENGTH,
   createTodoItem,
@@ -18,6 +19,7 @@ import {
 } from './api'
 import { ACCESS_LABELS } from './sharingApi'
 import { TodoItemRow } from './TodoItemRow'
+import { createTodoListPdf } from './todoListPdf'
 import type { TodoItem, TodoListSummary } from './types'
 
 const LOAD_ERROR = 'Nie udało się wczytać punktów listy.'
@@ -316,6 +318,23 @@ export function TodoListView({
     }
   }
 
+  const [exporting, setExporting] = useState(false)
+
+  /** PDF z punktami w kolejności z ekranu – działa przy każdych uprawnieniach, także „Podgląd”. */
+  const handleExportPdf = async () => {
+    const current = itemsRef.current
+    if (!current) return
+    setExporting(true)
+    setActionError(null)
+    try {
+      await downloadPdf(createTodoListPdf({ list, items: current }), toPdfFileName(list.title, 'lista'))
+    } catch {
+      setActionError('Nie udało się wygenerować pliku PDF. Spróbuj ponownie.')
+    } finally {
+      setExporting(false)
+    }
+  }
+
   const doneCount = items?.filter((i) => i.isDone).length ?? list.doneCount
   const itemCount = items?.length ?? list.itemCount
 
@@ -331,6 +350,15 @@ export function TodoListView({
         </button>
         <div className="flex items-start gap-2">
           <h2 className="min-w-0 flex-1 text-2xl font-bold tracking-tight break-words text-slate-900">{list.title}</h2>
+          <IconButton
+            label={exporting ? 'Generowanie pliku PDF…' : `Pobierz listę ${list.title} jako PDF`}
+            title={exporting ? 'Generowanie…' : 'Pobierz PDF'}
+            touch
+            disabled={items === null || exporting}
+            onClick={() => void handleExportPdf()}
+          >
+            <DownloadIcon />
+          </IconButton>
           {isOwner ? (
             <>
               <IconButton label={`Udostępnij listę ${list.title}`} title="Udostępnij" touch onClick={onShare}>

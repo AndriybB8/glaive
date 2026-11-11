@@ -1,5 +1,5 @@
 import type { Content, ContentText, TableCell, TDocumentDefinitions } from 'pdfmake/interfaces'
-import { createPdfDocument, PDF_COLORS, PDF_CONTENT_WIDTH } from '../../lib/pdf'
+import { createPdfDocument, PDF_COLORS, progressBar } from '../../lib/pdf'
 import { countDays, formatDate, formatDateRange, formatDays } from '../schedules/scheduleDates'
 import type { Schedule } from '../schedules/types'
 import { readableTextColor } from '../tags/tagColors'
@@ -8,22 +8,8 @@ import { groupTasks, isOverdue, priorityOptions } from './taskMeta'
 import type { Task } from './types'
 
 const OVERDUE_COLOR = '#b91c1c'
-const PROGRESS_COLOR = '#2563eb'
 
 const priorityLabels = Object.fromEntries(priorityOptions.map((o) => [o.value, o.label])) as Record<Task['priority'], string>
-
-/** Pasek postępu narysowany jak w aplikacji: szare tło i niebieskie wypełnienie. */
-function progressBar(done: number, total: number): Content {
-  const height = 6
-  const filled = total > 0 ? (done / total) * PDF_CONTENT_WIDTH : 0
-  return {
-    canvas: [
-      { type: 'rect', x: 0, y: 0, w: PDF_CONTENT_WIDTH, h: height, r: 3, color: PDF_COLORS.subtle },
-      ...(filled > 0 ? [{ type: 'rect' as const, x: 0, y: 0, w: filled, h: height, r: 3, color: PROGRESS_COLOR }] : []),
-    ],
-    margin: [0, 4, 0, 14],
-  }
-}
 
 /** Tagi jako kolorowe etykiety w jednej linii (tło w kolorze tagu, czytelny tekst – jak TagChip). */
 function tagLine(tags: readonly Tag[]): Content {
