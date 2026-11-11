@@ -6,6 +6,7 @@ import { IconButton } from '../../components/ui/IconButton'
 import { PencilIcon, TrashIcon } from '../../components/ui/icons'
 import { ProgressBar } from '../../components/ui/ProgressBar'
 import { ApiError } from '../../lib/http'
+import { downloadPdf, toPdfFileName } from '../../lib/pdf'
 import { countDays, formatDate, formatDateRange, formatDays, todayIso } from '../schedules/scheduleDates'
 import type { Schedule } from '../schedules/types'
 import { getTags } from '../tags/api'
@@ -16,6 +17,7 @@ import { TaskTagFilter, type TagFilterStatus } from '../taskTags/TaskTagFilter'
 import { changeTaskStatus, getTasks } from './api'
 import { DeleteTaskDialog } from './DeleteTaskDialog'
 import { TaskFormDialog } from './TaskFormDialog'
+import { createSchedulePdf } from './schedulePdf'
 import { groupTasks, isOverdue, priorityBadges, statusOptions } from './taskMeta'
 import type { Task, TaskStatus } from './types'
 
@@ -254,6 +256,30 @@ export function ScheduleTasksPage({ schedule, onBack }: ScheduleTasksPageProps) 
   const visibleTasks = tasks && matchingIds ? tasks.filter((t) => matchingIds.has(t.id)) : tasks
   const selectedFilterTags = allTags.filter((t) => filterTagIds.includes(t.id))
 
+  const [exporting, setExporting] = useState(false)
+
+  /** PDF z tym, co widać na ekranie: postęp całego harmonogramu i lista zadań po filtrze tagów. */
+  const handleExportPdf = async () => {
+    if (!tasks) return
+    setExporting(true)
+    setActionError(null)
+    try {
+      const document = createSchedulePdf({
+        schedule,
+        allTasks: tasks,
+        visibleTasks: visibleTasks ?? tasks,
+        tagsByTask,
+        filterTags: selectedFilterTags,
+        today,
+      })
+      await downloadPdf(document, toPdfFileName(schedule.name, 'harmonogram'))
+    } catch {
+      setActionError('Nie udało się wygenerować pliku PDF. Spróbuj ponownie.')
+    } finally {
+      setExporting(false)
+    }
+  }
+
   const doneCount = tasks?.filter((t) => t.status === 'done').length ?? 0
   const totalCount = tasks?.length ?? 0
 
@@ -266,11 +292,17 @@ export function ScheduleTasksPage({ schedule, onBack }: ScheduleTasksPageProps) 
       </div>
 
       {/* Nagłówek jak w zakładce Notatki: tytuł text-lg font-semibold i główny przycisk. */}
-      <header className="flex items-center justify-between gap-2 pt-2 pb-1">
-        <h1 className="min-w-0 truncate text-lg font-semibold">{schedule.name}</h1>
-        <Button onClick={() => setDialog({ kind: 'create' })} disabled={loadError === SCHEDULE_GONE}>
-          Nowe zadanie
-        </Button>
+      {/* Na wąskim ekranie przyciski schodzą pod nazwę, zamiast ją ucinać. */}
+      <header className="flex flex-wrap items-center justify-between gap-2 pt-2 pb-1">
+        <h1 className="min-w-0 flex-1 basis-48 truncate text-lg font-semibold">{schedule.name}</h1>
+        <div className="flex shrink-0 items-center gap-2">
+          <Button variant="secondary" onClick={() => void handleExportPdf()} disabled={tasks === null || exporting}>
+            {exporting ? 'Generowanie…' : 'Pobierz PDF'}
+          </Button>
+          <Button onClick={() => setDialog({ kind: 'create' })} disabled={loadError === SCHEDULE_GONE}>
+            Nowe zadanie
+          </Button>
+        </div>
       </header>
       <p className="text-sm text-slate-500 tabular-nums">
         {formatDateRange(schedule.startDate, schedule.endDate)} · {formatDays(countDays(schedule.startDate, schedule.endDate))}
