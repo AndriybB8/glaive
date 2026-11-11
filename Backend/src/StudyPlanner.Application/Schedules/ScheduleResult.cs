@@ -5,6 +5,7 @@ public enum ScheduleErrorType
     NotFound,
     Validation,
     Conflict,
+    Forbidden,
 }
 
 /// <param name="Current">Przy konflikcie: aktualna wersja harmonogramu z serwera.</param>
