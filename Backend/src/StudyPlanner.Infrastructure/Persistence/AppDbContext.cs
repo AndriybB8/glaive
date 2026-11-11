@@ -1,4 +1,3 @@
-using DefaultNamespace;
 using Microsoft.EntityFrameworkCore;
 using StudyPlanner.Domain.NoteGroups;
 using StudyPlanner.Domain.Notes;
@@ -46,7 +45,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
     /// <summary>Ustawienia timera Pomodoro – jeden wiersz na użytkownika.</summary>
     public DbSet<PomodoroSettings> PomodoroSettings => Set<PomodoroSettings>();
 
-    DbSet<ScheduleMember> ScheduleMembers => Set<ScheduleMember>();
+    public DbSet<ScheduleMember> ScheduleMembers => Set<ScheduleMember>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

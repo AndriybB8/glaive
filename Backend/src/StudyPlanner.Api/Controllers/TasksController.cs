@@ -61,6 +61,7 @@ public sealed class TasksController(TaskService taskService) : ControllerBase
         {
             TaskErrorType.NotFound => StatusCodes.Status404NotFound,
             TaskErrorType.Conflict => StatusCodes.Status409Conflict,
+            TaskErrorType.Forbidden => StatusCodes.Status403Forbidden,
             _ => StatusCodes.Status400BadRequest,
         };
 

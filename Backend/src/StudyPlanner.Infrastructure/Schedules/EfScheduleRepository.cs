@@ -46,4 +46,25 @@ public sealed class EfScheduleRepository(AppDbContext db) : IScheduleRepository
         db.Schedules.Remove(schedule);
         await db.SaveChangesAsync(cancellationToken);
     }
+
+    public async Task<ScheduleWithAccess?> GetWithAccessAsync(Guid id, Guid userId, CancellationToken cancellationToken)
+    {
+        var row = await db.Schedules
+            .Where(s => s.Id == id)
+            .Select(s => new
+            {
+                Schedule = s,
+                Role = db.ScheduleMembers
+                    .Where(m => m.ScheduleId == s.Id && m.UserId == userId && m.AcceptedAt != null)
+                    .Select(m => (ScheduleMemberRole?)m.Role)
+                    .FirstOrDefault(),
+            })
+            .FirstOrDefaultAsync(cancellationToken);
+
+        return row != null && ToAccess(row.Schedule, userId, row.Role) is { } access ?
+            new ScheduleWithAccess(row.Schedule, access) : null;
+    }
+
+    private static ScheduleAccess? ToAccess(Schedule schedule, Guid userId, ScheduleMemberRole? role) =>
+        schedule.UserId == userId ? ScheduleAccess.Owner : role?.ToAccess();
 }

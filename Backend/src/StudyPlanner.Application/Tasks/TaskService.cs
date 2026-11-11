@@ -14,17 +14,17 @@ public sealed class TaskService(
 {
     private static readonly TaskError TaskNotFound = new(TaskErrorType.NotFound, "Nie znaleziono zadania.");
     private static readonly TaskError ScheduleNotFound = new(TaskErrorType.NotFound, "Nie znaleziono harmonogramu.");
+    private static readonly TaskError Forbidden = new(TaskErrorType.Forbidden, "Masz tylko podgląd tego harmonogramu.");
 
     /// <summary>Zadania harmonogramu: najpierw z najbliższym terminem (bez terminu na końcu), potem wg priorytetu.</summary>
     public async Task<TaskResult<IReadOnlyList<TaskDto>>> GetByScheduleAsync(Guid scheduleId, IReadOnlyList<Guid> tagIds, CancellationToken cancellationToken)
     {
-        var schedule = await schedules.GetByIdAsync(scheduleId, currentUser.UserId, cancellationToken);
-        if (schedule is null)
+        if (await schedules.GetWithAccessAsync(scheduleId, currentUser.UserId, cancellationToken) is null)
         {
             return TaskResult<IReadOnlyList<TaskDto>>.Failure(ScheduleNotFound);
         }
 
-        var items = await tasks.GetByScheduleAsync(scheduleId, currentUser.UserId, tagIds, cancellationToken);
+        var items = await tasks.GetByScheduleAsync(scheduleId, tagIds, cancellationToken);
         IReadOnlyList<TaskDto> result = items
             .OrderBy(t => t.DueDate is null)
             .ThenBy(t => t.DueDate)
@@ -47,12 +47,18 @@ public sealed class TaskService(
 
     public async Task<TaskResult<TaskDto>> CreateAsync(Guid scheduleId, CreateTaskRequest request, CancellationToken cancellationToken)
     {
-        var schedule = await schedules.GetByIdAsync(scheduleId, currentUser.UserId, cancellationToken);
-        if (schedule is null)
+        var scheduleWithAccess = await schedules.GetWithAccessAsync(scheduleId, currentUser.UserId, cancellationToken);
+        if (scheduleWithAccess is null)
         {
             return TaskResult<TaskDto>.Failure(ScheduleNotFound);
         }
 
+        if (!scheduleWithAccess.Access.CanEditTasks())
+        {
+            return TaskResult<TaskDto>.Failure(Forbidden);
+        }
+
+        var schedule = scheduleWithAccess.Schedule;
         var title = request.Title?.Trim() ?? string.Empty;
         var description = NormalizeDescription(request.Description);
         var priority = request.Priority ?? TaskPriority.Medium;
@@ -63,7 +69,7 @@ public sealed class TaskService(
             return TaskResult<TaskDto>.Failure(error);
         }
 
-        var task = TaskItem.Create(currentUser.UserId, schedule.Id, title, description, request.DueDate, priority, status, UtcNow());
+        var task = TaskItem.Create(schedule.UserId, schedule.Id, title, description, request.DueDate, priority, status, UtcNow());
         await tasks.AddAsync(task, cancellationToken);
 
         return TaskResult<TaskDto>.Success(TaskDto.From(task));
@@ -77,7 +83,12 @@ public sealed class TaskService(
             return TaskResult<TaskDto>.Failure(TaskNotFound);
         }
 
-        var (task, schedule) = found.Value;
+        var (task, schedule, access) = found.Value;
+        if (!access.CanEditTasks())
+        {
+            return TaskResult<TaskDto>.Failure(Forbidden);
+        }
+
         var title = request.Title?.Trim() ?? string.Empty;
         var description = NormalizeDescription(request.Description);
         var priority = request.Priority ?? task.Priority;
@@ -120,6 +131,11 @@ public sealed class TaskService(
             return TaskResult<TaskDto>.Failure(TaskNotFound);
         }
 
+        if (!found.Value.Access.CanEditTasks())
+        {
+            return TaskResult<TaskDto>.Failure(Forbidden);
+        }
+
         var task = found.Value.Task;
         if (task.Status == status)
         {
@@ -138,24 +154,25 @@ public sealed class TaskService(
             return TaskResult<bool>.Failure(TaskNotFound);
         }
 
+        if (!found.Value.Access.CanEditTasks())
+        {
+            return TaskResult<bool>.Failure(Forbidden);
+        }
+
         await tasks.DeleteAsync(found.Value.Task, cancellationToken);
         return TaskResult<bool>.Success(true);
     }
 
-    /// <summary>
-    /// Zadanie użytkownika razem z jego harmonogramem. Zadania usuniętego harmonogramu traktujemy
-    /// jak nieistniejące (w bazie usunie je kaskada).
-    /// </summary>
-    private async Task<(TaskItem Task, Schedule Schedule)?> FindAsync(Guid id, CancellationToken cancellationToken)
+    private async Task<(TaskItem Task, Schedule Schedule, ScheduleAccess Access)?> FindAsync(Guid id, CancellationToken cancellationToken)
     {
-        var task = await tasks.GetByIdAsync(id, currentUser.UserId, cancellationToken);
+        var task = await tasks.GetByIdAsync(id, cancellationToken);
         if (task is null)
         {
             return null;
         }
 
-        var schedule = await schedules.GetByIdAsync(task.ScheduleId, currentUser.UserId, cancellationToken);
-        return schedule is null ? null : (task, schedule);
+        var scheduleWithAccess = await schedules.GetWithAccessAsync(task.ScheduleId, currentUser.UserId, cancellationToken);
+        return scheduleWithAccess is null ? null : (task, scheduleWithAccess.Schedule, scheduleWithAccess.Access);
     }
 
     private async Task<TaskResult<TaskDto>> SaveAsync(TaskItem task, CancellationToken cancellationToken)
@@ -166,7 +183,7 @@ public sealed class TaskService(
         }
         catch (TaskConcurrencyException)
         {
-            var current = await tasks.GetByIdAsync(task.Id, currentUser.UserId, cancellationToken);
+            var current = await tasks.GetByIdAsync(task.Id, cancellationToken);
             return current is null
                 ? TaskResult<TaskDto>.Failure(TaskNotFound)
                 : TaskResult<TaskDto>.Failure(Conflict(current));

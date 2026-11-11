@@ -32,7 +32,13 @@ public class TaskTagsController(TaskTagService ttService) : ControllerBase
 
     private static ObjectResult ToErrorResponse(TaskTagError error)
     {
-        var problem = new ProblemDetails { Status = StatusCodes.Status404NotFound, Detail = error.Message };
-        return new ObjectResult(problem) { StatusCode = StatusCodes.Status404NotFound };
+        var status = error.Type switch
+        {
+            TaskTagErrorType.Forbidden => StatusCodes.Status403Forbidden,
+            _ => StatusCodes.Status404NotFound,
+        };
+
+        var problem = new ProblemDetails { Status = status, Detail = error.Message };
+        return new ObjectResult(problem) { StatusCode = status };
     }
 }

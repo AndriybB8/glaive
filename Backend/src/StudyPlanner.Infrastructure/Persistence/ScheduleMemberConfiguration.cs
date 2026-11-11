@@ -1,4 +1,3 @@
-using DefaultNamespace;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 using StudyPlanner.Domain.Schedules;

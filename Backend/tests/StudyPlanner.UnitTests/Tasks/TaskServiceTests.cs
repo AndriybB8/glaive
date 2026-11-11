@@ -8,7 +8,8 @@ namespace StudyPlanner.UnitTests.Tasks;
 
 public class TaskServiceTests
 {
-    private static readonly Guid UserId = Guid.NewGuid();
+    private static readonly Guid OwnerId = Guid.NewGuid();
+    private static readonly Guid FriendId = Guid.NewGuid();
     private static readonly DateOnly Jan25 = new(2027, 1, 25);
     private static readonly DateOnly Feb1 = new(2027, 2, 1);
     private static readonly DateOnly Feb14 = new(2027, 2, 14);
@@ -16,18 +17,22 @@ public class TaskServiceTests
     private readonly FakeTaskRepository _tasks = new();
     private readonly FakeScheduleRepository _schedules = new();
     private readonly FixedTimeProvider _time = new(new DateTimeOffset(2026, 10, 25, 12, 0, 0, TimeSpan.Zero));
+    private readonly TestUser _currentUser = new(OwnerId);
     private readonly TaskService _service;
     private readonly Schedule _schedule;
 
     public TaskServiceTests()
     {
-        _service = new TaskService(_tasks, _schedules, new TestUser(UserId), _time);
-        _schedule = Schedule.Create(UserId, "Sesja zimowa", Jan25, Feb14, DateTime.UtcNow);
-        _schedules.Items.Add(_schedule);
+        _service = new TaskService(_tasks, _schedules, _currentUser, _time);
+        _schedule = Schedule.Create(OwnerId, "Sesja zimowa", Jan25, Feb14, DateTime.UtcNow);
+        _schedules.Schedules.Add(_schedule);
     }
 
     private async Task<TaskDto> CreateAsync(string title = "Powtórka", DateOnly? dueDate = null) =>
         (await _service.CreateAsync(_schedule.Id, new CreateTaskRequest(title, null, dueDate, null, null), CancellationToken.None)).Value!;
+
+    private void ShareWith(Guid userId, ScheduleMemberRole role) =>
+        _schedules.Members.Add(new ScheduleMemberStub(_schedule.Id, userId, role));
 
     [Fact]
     public async Task Create_UsesDefaultsAndBelongsToSchedule()
@@ -42,7 +47,7 @@ public class TaskServiceTests
         Assert.Equal(TaskPriority.Medium, task.Priority);
         Assert.Equal(TaskItemStatus.ToDo, task.Status);
         Assert.Equal(1, task.Version);
-        Assert.Equal(UserId, _tasks.Items.Single().UserId);
+        Assert.Equal(OwnerId, _tasks.Items.Single().UserId);
     }
 
     [Fact]
@@ -148,8 +153,8 @@ public class TaskServiceTests
     [Fact]
     public async Task GetBySchedule_ReturnsOnlyThatSchedulesTasks()
     {
-        var other = Schedule.Create(UserId, "Inny", Jan25, Feb14, DateTime.UtcNow);
-        _schedules.Items.Add(other);
+        var other = Schedule.Create(OwnerId, "Inny", Jan25, Feb14, DateTime.UtcNow);
+        _schedules.Schedules.Add(other);
         await CreateAsync("Moje");
         await _service.CreateAsync(other.Id, new CreateTaskRequest("Z innego", null, null, null, null), CancellationToken.None);
 
@@ -248,7 +253,7 @@ public class TaskServiceTests
     public async Task TaskOfDeletedSchedule_IsNotFound()
     {
         var created = await CreateAsync();
-        _schedules.Items.Clear();
+        _schedules.Schedules.Clear();
 
         var get = await _service.GetByIdAsync(created.Id, CancellationToken.None);
         var status = await _service.ChangeStatusAsync(created.Id, new ChangeTaskStatusRequest(TaskItemStatus.Done), CancellationToken.None);
@@ -260,9 +265,11 @@ public class TaskServiceTests
     }
 
     [Fact]
-    public async Task TaskOfAnotherUser_IsNotFound()
+    public async Task TaskInScheduleWithoutAccess_IsNotFound()
     {
-        var foreign = TaskItem.Create(Guid.NewGuid(), _schedule.Id, "Cudze", null, null, TaskPriority.Low, TaskItemStatus.ToDo, DateTime.UtcNow);
+        var foreignSchedule = Schedule.Create(Guid.NewGuid(), "Cudzy", Jan25, Feb14, DateTime.UtcNow);
+        _schedules.Schedules.Add(foreignSchedule);
+        var foreign = TaskItem.Create(foreignSchedule.UserId, foreignSchedule.Id, "Cudze", null, null, TaskPriority.Low, TaskItemStatus.ToDo, DateTime.UtcNow);
         _tasks.Items.Add(foreign);
 
         var get = await _service.GetByIdAsync(foreign.Id, CancellationToken.None);
@@ -275,9 +282,84 @@ public class TaskServiceTests
         Assert.Equal("Cudze", _tasks.Items.Single().Title);
     }
 
+    [Theory]
+    [InlineData(nameof(TaskService.CreateAsync))]
+    public async Task Create_ByViewer_IsForbidden(string _)
+    {
+        ShareWith(FriendId, ScheduleMemberRole.Viewer);
+        _currentUser.UserId = FriendId;
+
+        var result = await _service.CreateAsync(_schedule.Id, new CreateTaskRequest("A", null, null, null, null), CancellationToken.None);
+
+        Assert.Equal(TaskErrorType.Forbidden, result.Error!.Type);
+        Assert.Empty(_tasks.Items);
+    }
+
+    [Fact]
+    public async Task Create_ByEditor_Succeeds_AndTaskBelongsToScheduleOwner()
+    {
+        ShareWith(FriendId, ScheduleMemberRole.Editor);
+        _currentUser.UserId = FriendId;
+
+        var result = await _service.CreateAsync(_schedule.Id, new CreateTaskRequest("A", null, null, null, null), CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(OwnerId, _tasks.Items.Single().UserId);
+    }
+
+    [Fact]
+    public async Task GetBySchedule_ByViewer_Succeeds()
+    {
+        await CreateAsync();
+        ShareWith(FriendId, ScheduleMemberRole.Viewer);
+        _currentUser.UserId = FriendId;
+
+        var result = await _service.GetByScheduleAsync(_schedule.Id, [], CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        Assert.Single(result.Value!);
+    }
+
+    [Fact]
+    public async Task Update_ByViewer_IsForbidden()
+    {
+        var created = await CreateAsync();
+        ShareWith(FriendId, ScheduleMemberRole.Viewer);
+        _currentUser.UserId = FriendId;
+
+        var result = await _service.UpdateAsync(created.Id, new UpdateTaskRequest("Zmiana", null, null, null, null, created.Version), CancellationToken.None);
+
+        Assert.Equal(TaskErrorType.Forbidden, result.Error!.Type);
+    }
+
+    [Fact]
+    public async Task ChangeStatus_ByEditor_Succeeds()
+    {
+        var created = await CreateAsync();
+        ShareWith(FriendId, ScheduleMemberRole.Editor);
+        _currentUser.UserId = FriendId;
+
+        var result = await _service.ChangeStatusAsync(created.Id, new ChangeTaskStatusRequest(TaskItemStatus.Done), CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+    }
+
+    [Fact]
+    public async Task Delete_ByViewer_IsForbidden()
+    {
+        var created = await CreateAsync();
+        ShareWith(FriendId, ScheduleMemberRole.Viewer);
+        _currentUser.UserId = FriendId;
+
+        var result = await _service.DeleteAsync(created.Id, CancellationToken.None);
+
+        Assert.Equal(TaskErrorType.Forbidden, result.Error!.Type);
+        Assert.Single(_tasks.Items);
+    }
+
     private sealed class TestUser(Guid userId) : ICurrentUser
     {
-        public Guid UserId => userId;
+        public Guid UserId { get; set; } = userId;
     }
 
     private sealed class FixedTimeProvider(DateTimeOffset now) : TimeProvider
@@ -289,15 +371,17 @@ public class TaskServiceTests
         public void Advance(TimeSpan by) => _now = _now.Add(by);
     }
 
+    private sealed record ScheduleMemberStub(Guid ScheduleId, Guid UserId, ScheduleMemberRole Role);
+
     private sealed class FakeTaskRepository : ITaskRepository
     {
         public List<TaskItem> Items { get; } = [];
 
-        public Task<IReadOnlyList<TaskItem>> GetByScheduleAsync(Guid scheduleId, Guid userId, IReadOnlyList<Guid> tagIds, CancellationToken cancellationToken) =>
-            Task.FromResult<IReadOnlyList<TaskItem>>(Items.Where(t => t.ScheduleId == scheduleId && t.UserId == userId).ToList());
+        public Task<IReadOnlyList<TaskItem>> GetByScheduleAsync(Guid scheduleId, IReadOnlyList<Guid> tagIds, CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlyList<TaskItem>>(Items.Where(t => t.ScheduleId == scheduleId).ToList());
 
-        public Task<TaskItem?> GetByIdAsync(Guid id, Guid userId, CancellationToken cancellationToken) =>
-            Task.FromResult(Items.FirstOrDefault(t => t.Id == id && t.UserId == userId));
+        public Task<TaskItem?> GetByIdAsync(Guid id, CancellationToken cancellationToken) =>
+            Task.FromResult(Items.FirstOrDefault(t => t.Id == id));
 
         public Task AddAsync(TaskItem task, CancellationToken cancellationToken)
         {
@@ -316,17 +400,19 @@ public class TaskServiceTests
 
     private sealed class FakeScheduleRepository : IScheduleRepository
     {
-        public List<Schedule> Items { get; } = [];
+        public List<Schedule> Schedules { get; } = [];
+
+        public List<ScheduleMemberStub> Members { get; } = [];
 
         public Task<IReadOnlyList<Schedule>> GetByUserAsync(Guid userId, CancellationToken cancellationToken) =>
-            Task.FromResult<IReadOnlyList<Schedule>>(Items.Where(s => s.UserId == userId).ToList());
+            Task.FromResult<IReadOnlyList<Schedule>>(Schedules.Where(s => s.UserId == userId).ToList());
 
         public Task<Schedule?> GetByIdAsync(Guid id, Guid userId, CancellationToken cancellationToken) =>
-            Task.FromResult(Items.FirstOrDefault(s => s.Id == id && s.UserId == userId));
+            Task.FromResult(Schedules.FirstOrDefault(s => s.Id == id && s.UserId == userId));
 
         public Task AddAsync(Schedule schedule, CancellationToken cancellationToken)
         {
-            Items.Add(schedule);
+            Schedules.Add(schedule);
             return Task.CompletedTask;
         }
 
@@ -334,8 +420,23 @@ public class TaskServiceTests
 
         public Task DeleteAsync(Schedule schedule, CancellationToken cancellationToken)
         {
-            Items.Remove(schedule);
+            Schedules.Remove(schedule);
             return Task.CompletedTask;
+        }
+
+        public Task<ScheduleWithAccess?> GetWithAccessAsync(Guid id, Guid userId, CancellationToken cancellationToken)
+        {
+            var schedule = Schedules.FirstOrDefault(s => s.Id == id);
+            if (schedule is null)
+            {
+                return Task.FromResult<ScheduleWithAccess?>(null);
+            }
+
+            var access = schedule.UserId == userId
+                ? ScheduleAccess.Owner
+                : Members.FirstOrDefault(m => m.ScheduleId == id && m.UserId == userId)?.Role.ToAccess();
+
+            return Task.FromResult(access is { } value ? new ScheduleWithAccess(schedule, value) : null);
         }
     }
 }
