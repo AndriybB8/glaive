@@ -12,6 +12,8 @@ interface TodoItemRowProps {
   dragging: boolean
   /** Tylko podgląd (lista udostępniona z uprawnieniem „Podgląd”) – bez odhaczania, edycji, przestawiania i usuwania. */
   readOnly?: boolean
+  /** Ktoś inny właśnie dodał albo zmienił ten punkt (adres email) – na chwilę podświetlamy go z podpisem. */
+  changedBy?: string
   onToggle: (item: TodoItem) => void
   /** Zwraca false, gdy zapis się nie udał – wtedy pole edycji zostaje otwarte. */
   onRename: (item: TodoItem, title: string) => Promise<boolean>
@@ -32,6 +34,7 @@ export function TodoItemRow({
   count,
   dragging,
   readOnly = false,
+  changedBy,
   onToggle,
   onRename,
   onDelete,
@@ -94,8 +97,8 @@ export function TodoItemRow({
       onDrop={(event) => event.preventDefault()}
       onDragEnd={onDragEnd}
       className={`group flex items-center gap-1 rounded-lg border bg-white py-1 pr-1 pl-1 sm:gap-2 sm:pl-2 ${
-        dragging ? 'border-blue-300 opacity-50' : 'border-slate-200'
-      }`}
+        dragging ? 'border-blue-300 opacity-50' : changedBy ? 'border-amber-300 bg-amber-50' : 'border-slate-200'
+      } transition-colors duration-700`}
     >
       {!readOnly && (
         <span className="hidden shrink-0 cursor-grab text-slate-400 active:cursor-grabbing sm:block" title="Przeciągnij, aby zmienić kolejność" aria-hidden>
@@ -142,6 +145,17 @@ export function TodoItemRow({
         >
           {item.title}
         </button>
+      )}
+
+      {/* Na telefonie tylko podświetlenie wiersza (etykieta ścisnęłaby treść) – kto zmienił, mówi powiadomienie. */}
+      {changedBy && (
+        <span
+          title={`Zmienione przed chwilą przez ${changedBy}`}
+          className="hidden max-w-40 shrink-0 truncate rounded-full bg-amber-100 px-2 py-0.5 text-xs text-amber-900 sm:block"
+        >
+          <span className="sr-only">Zmienione przed chwilą przez </span>
+          {changedBy}
+        </span>
       )}
 
       {!readOnly && (
