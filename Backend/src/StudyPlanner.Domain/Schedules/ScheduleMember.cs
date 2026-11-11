@@ -1,4 +1,4 @@
-namespace DefaultNamespace;
+namespace StudyPlanner.Domain.Schedules;
 
 public enum ScheduleMemberRole
 {

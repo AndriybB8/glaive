@@ -1,4 +1,3 @@
-using DefaultNamespace;
 using Microsoft.EntityFrameworkCore;
 using StudyPlanner.Domain.NoteGroups;
 using StudyPlanner.Domain.Notes;
