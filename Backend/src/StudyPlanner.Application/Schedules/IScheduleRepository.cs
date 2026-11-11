@@ -18,6 +18,8 @@ public interface IScheduleRepository
     Task UpdateAsync(Schedule schedule, CancellationToken cancellationToken);
 
     Task DeleteAsync(Schedule schedule, CancellationToken cancellationToken);
+
+    Task<ScheduleWithAccess?> GetWithAccessAsync(Guid id, Guid userId, CancellationToken cancellationToken);
 }
 
 /// <summary>
