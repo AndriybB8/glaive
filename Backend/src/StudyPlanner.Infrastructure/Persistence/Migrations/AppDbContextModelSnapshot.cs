@@ -22,6 +22,42 @@ namespace StudyPlanner.Infrastructure.Persistence.Migrations
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
+            modelBuilder.Entity("DefaultNamespace.ScheduleMember", b =>
+                {
+                    b.Property<Guid>("ScheduleId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("schedule_id");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("user_id");
+
+                    b.Property<DateTime?>("AcceptedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("accepted_at");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("Role")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("role");
+
+                    b.HasKey("ScheduleId", "UserId")
+                        .HasName("pk_schedule_members");
+
+                    b.HasIndex("UserId")
+                        .HasDatabaseName("ix_schedule_members_user_id");
+
+                    b.ToTable("schedule_members", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_schedule_members_role", "role IN ('Viewer', 'Editor')");
+                        });
+                });
+
             modelBuilder.Entity("StudyPlanner.Domain.NoteGroups.NoteGroup", b =>
                 {
                     b.Property<Guid>("Id")
@@ -539,6 +575,23 @@ namespace StudyPlanner.Infrastructure.Persistence.Migrations
                         {
                             t.HasCheckConstraint("ck_users_status", "status IN ('Active', 'Inactive')");
                         });
+                });
+
+            modelBuilder.Entity("DefaultNamespace.ScheduleMember", b =>
+                {
+                    b.HasOne("StudyPlanner.Domain.Schedules.Schedule", null)
+                        .WithMany()
+                        .HasForeignKey("ScheduleId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_schedule_members_schedules_schedule_id");
+
+                    b.HasOne("StudyPlanner.Domain.Users.User", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_schedule_members_users_user_id");
                 });
 
             modelBuilder.Entity("StudyPlanner.Domain.NoteGroups.NoteGroup", b =>
