@@ -1,8 +1,13 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { ChecklistIcon, UsersIcon } from '../../components/ui/icons'
+import { getCurrentUser } from '../../lib/authToken'
 import { getTodoLists } from './api'
 import { DeleteTodoListDialog } from './DeleteTodoListDialog'
+import { describeChange, describeInvitation } from './describeChange'
 import { LeaveTodoListDialog } from './LeaveTodoListDialog'
+import { LiveStatusBadge } from './LiveStatusBadge'
+import { LiveToasts, type LiveToast } from './LiveToasts'
+import { useTodoListHub, type TodoListChangedMessage, type TodoListInvitationReceivedMessage } from './realtime'
 import { ShareTodoListDialog } from './ShareTodoListDialog'
 import { ACCESS_LABELS, getTodoListInvitations } from './sharingApi'
 import { TodoInvitations } from './TodoInvitations'
@@ -11,6 +16,13 @@ import { TodoListView } from './TodoListView'
 import type { TodoList, TodoListInvitation, TodoListSummary } from './types'
 
 const LOAD_ERROR = 'Nie udało się wczytać list. Sprawdź, czy backend jest uruchomiony.'
+
+/** Zmiany na żywo: jak długo widać powiadomienie i podświetlony punkt, ile powiadomień naraz. */
+const TOAST_MS = 6000
+const HIGHLIGHT_MS = 5000
+const MAX_TOASTS = 3
+/** Zmiany przychodzą seriami – panel list pobieramy raz po chwili ciszy. */
+const LISTS_REFRESH_DELAY_MS = 300
 
 type OpenDialog =
   | { kind: 'create' }
@@ -36,6 +48,16 @@ export function TodoListsPage() {
   const [invitations, setInvitations] = useState<TodoListInvitation[]>([])
   const selected = lists?.find((l) => l.id === selectedId) ?? null
 
+  // --- Zmiany na żywo (SignalR) ---
+  const [me] = useState(getCurrentUser)
+  const [toasts, setToasts] = useState<LiveToast[]>([])
+  /** Sygnał dla otwartej listy: pobierz punkty od nowa. */
+  const [itemsRefreshSignal, setItemsRefreshSignal] = useState(0)
+  /** Punkty właśnie zmienione przez inne osoby: id → { email, numer zmiany } (numer, żeby stary timer nie zgasił nowszej zmiany). */
+  const [changedItems, setChangedItems] = useState<Record<string, { email: string; seq: number }>>({})
+  const liveSeqRef = useRef(0)
+  const listsRefreshTimerRef = useRef<number | undefined>(undefined)
+
   const loadLists = useCallback(async () => {
     try {
       setListError(null)
@@ -44,6 +66,72 @@ export function TodoListsPage() {
       setListError(LOAD_ERROR)
     }
   }, [])
+
+  /** Panel list po zmianie na żywo: po cichu (błąd zostawia poprzedni stan) i raz na serię zmian. */
+  const refreshListsQuietly = useCallback(() => {
+    window.clearTimeout(listsRefreshTimerRef.current)
+    listsRefreshTimerRef.current = window.setTimeout(() => {
+      getTodoLists()
+        .then(setLists)
+        .catch(() => undefined)
+    }, LISTS_REFRESH_DELAY_MS)
+  }, [])
+
+  useEffect(() => () => window.clearTimeout(listsRefreshTimerRef.current), [])
+
+  const dismissToast = useCallback((id: number) => setToasts((current) => current.filter((t) => t.id !== id)), [])
+
+  const pushToast = (actor: string, text: string) => {
+    const id = ++liveSeqRef.current
+    setToasts((current) => [...current, { id, actor: actor || 'Ktoś', text }].slice(-MAX_TOASTS))
+    window.setTimeout(() => dismissToast(id), TOAST_MS)
+  }
+
+  const highlightItem = (itemId: string, email: string) => {
+    const seq = ++liveSeqRef.current
+    setChangedItems((current) => ({ ...current, [itemId]: { email, seq } }))
+    window.setTimeout(() => {
+      setChangedItems((current) => {
+        if (current[itemId]?.seq !== seq) return current
+        const next = { ...current }
+        delete next[itemId]
+        return next
+      })
+    }, HIGHLIGHT_MS)
+  }
+
+  const handleListChanged = (message: TodoListChangedMessage) => {
+    const isOpen = message.listId === selectedId
+    const fromSomeoneElse = message.actorUserId !== me?.id
+
+    // Stan zawsze z API – także przy własnych zmianach, bo mogły przyjść z innej karty.
+    refreshListsQuietly()
+    if (isOpen) setItemsRefreshSignal((n) => n + 1)
+
+    if (fromSomeoneElse && isOpen && message.itemId && (message.change === 'itemCreated' || message.change === 'itemUpdated')) {
+      highlightItem(message.itemId, message.actorEmail || 'Ktoś')
+    }
+
+    const listTitle = lists?.find((l) => l.id === message.listId)?.title ?? null
+    const text = describeChange(message, me, listTitle, isOpen)
+    if (text) pushToast(message.actorEmail, text)
+  }
+
+  const handleInvitationReceived = (message: TodoListInvitationReceivedMessage) => {
+    void loadInvitations()
+    if (message.actorUserId !== me?.id) pushToast(message.actorEmail, describeInvitation(message))
+  }
+
+  const liveStatus = useTodoListHub({
+    onListChanged: handleListChanged,
+    onInvitationReceived: handleInvitationReceived,
+    // Po przerwie w połączeniu wiadomości przepadły – pobieramy wszystko od nowa.
+    onResync: () => {
+      refreshListsQuietly()
+      void loadInvitations()
+      setItemsRefreshSignal((n) => n + 1)
+    },
+  })
 
   /** Zaproszenia to dodatek do panelu – błąd wczytania po cichu zostawia poprzedni stan. */
   const loadInvitations = useCallback(async () => {
@@ -145,7 +233,10 @@ export function TodoListsPage() {
         className={`w-full flex-col border-r border-slate-200 bg-slate-50 md:flex md:w-72 md:shrink-0 ${selected ? 'hidden' : 'flex'}`}
       >
         <div className="flex items-center justify-between gap-2 px-4 pt-5 pb-3">
-          <h1 className="text-lg font-semibold">Listy</h1>
+          <div className="flex min-w-0 flex-col gap-0.5">
+            <h1 className="text-lg font-semibold">Listy</h1>
+            <LiveStatusBadge status={liveStatus} />
+          </div>
           <button
             type="button"
             onClick={() => setDialog({ kind: 'create' })}
@@ -224,6 +315,8 @@ export function TodoListsPage() {
             onLeave={() => setDialog({ kind: 'leave', list: selected })}
             onAccessChanged={handleAccessChanged}
             onBack={() => setSelectedId(null)}
+            refreshSignal={itemsRefreshSignal}
+            changedItems={Object.fromEntries(Object.entries(changedItems).map(([id, change]) => [id, change.email]))}
           />
         ) : (
           <div className="m-auto max-w-xs px-6 text-center text-sm text-slate-500">Wybierz listę albo utwórz nową.</div>
@@ -251,6 +344,8 @@ export function TodoListsPage() {
           }}
         />
       )}
+      <LiveToasts toasts={toasts} onDismiss={dismissToast} />
+
       {dialog?.kind === 'delete' && (
         <DeleteTodoListDialog
           list={dialog.list}

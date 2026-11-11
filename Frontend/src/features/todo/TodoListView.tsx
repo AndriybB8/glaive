@@ -49,13 +49,31 @@ interface TodoListViewProps {
   /** Serwer odmówił (403) – uprawnienia do listy zmieniły się w międzyczasie; panel list powinien je wczytać od nowa. */
   onAccessChanged: () => void
   onBack: () => void
+  /** Zwiększany, gdy ktoś (albo my w innej karcie) zmienił punkty tej listy – pobieramy je wtedy od nowa. */
+  refreshSignal?: number
+  /** Punkty właśnie zmienione przez inne osoby: id punktu → adres email. */
+  changedItems?: Readonly<Record<string, string>>
 }
+
+/** Zmiany na żywo przychodzą seriami (np. przestawianie) – czekamy chwilę i pobieramy punkty raz. */
+const LIVE_REFRESH_DELAY_MS = 250
 
 /**
  * Punkty jednej listy: dodawanie, odhaczanie, edycja, usuwanie i zmiana kolejności.
  * Na udostępnionej liście z uprawnieniem „Podgląd” punkty są tylko do odczytu.
  */
-export function TodoListView({ list, onCountsChange, onRename, onDelete, onShare, onLeave, onAccessChanged, onBack }: TodoListViewProps) {
+export function TodoListView({
+  list,
+  onCountsChange,
+  onRename,
+  onDelete,
+  onShare,
+  onLeave,
+  onAccessChanged,
+  onBack,
+  refreshSignal = 0,
+  changedItems = {},
+}: TodoListViewProps) {
   const listId = list.id
   const isOwner = list.access === 'owner'
   const readOnly = list.access === 'viewer'
@@ -72,6 +90,13 @@ export function TodoListView({ list, onCountsChange, onRename, onDelete, onShare
   const dragStartOrderRef = useRef<string>('')
   /** Zapisy kolejności idą po kolei, żeby szybkie przesunięcia nie wyprzedziły się na serwerze. */
   const orderQueueRef = useRef<Promise<void>>(Promise.resolve())
+  // Odświeżanie na żywo nie może podmienić punktów w trakcie przeciągania ani przed zapisem kolejności –
+  // wtedy tylko je zapamiętujemy i wykonujemy, gdy użytkownik skończy.
+  const draggingRef = useRef(false)
+  const pendingOrderSavesRef = useRef(0)
+  const refreshDeferredRef = useRef(false)
+  /** Wartość sygnału przy otwarciu listy – na nią nie reagujemy (punkty i tak właśnie się wczytują). */
+  const initialRefreshSignalRef = useRef(refreshSignal)
 
   /**
    * Jedyna droga zmiany punktów: najpierw ref (od razu widoczny dla kolejnych akcji, np. szybkich przesunięć),
@@ -105,6 +130,33 @@ export function TodoListView({ list, onCountsChange, onRename, onDelete, onShare
       ignore = true
     }
   }, [listId, applyItems])
+
+  /** Aktualne punkty z serwera po zmianie na żywo. Błędy po cichu: 403/404 znaczy, że zmienił się dostęp albo lista zniknęła. */
+  const refreshFromServer = useCallback(async () => {
+    if (draggingRef.current || pendingOrderSavesRef.current > 0) {
+      refreshDeferredRef.current = true
+      return
+    }
+    refreshDeferredRef.current = false
+    try {
+      const fresh = await getTodoItems(listId)
+      // Użytkownik zaczął przeciągać w czasie pobierania – odświeżymy po zakończeniu.
+      if (draggingRef.current || pendingOrderSavesRef.current > 0) refreshDeferredRef.current = true
+      else applyItems(fresh)
+    } catch (error) {
+      if (error instanceof ApiError && (error.status === 403 || error.status === 404)) onAccessChanged()
+    }
+  }, [listId, applyItems, onAccessChanged])
+
+  const runDeferredRefresh = useCallback(() => {
+    if (refreshDeferredRef.current && !draggingRef.current && pendingOrderSavesRef.current === 0) void refreshFromServer()
+  }, [refreshFromServer])
+
+  useEffect(() => {
+    if (refreshSignal === initialRefreshSignalRef.current) return
+    const timer = window.setTimeout(() => void refreshFromServer(), LIVE_REFRESH_DELAY_MS)
+    return () => window.clearTimeout(timer)
+  }, [refreshSignal, refreshFromServer])
 
   // Liczniki w panelu list zawsze zgodne z tym, co widać tutaj.
   useEffect(() => {
@@ -201,9 +253,13 @@ export function TodoListView({ list, onCountsChange, onRename, onDelete, onShare
 
   /** Zapisuje kolejność z ekranu. Odpowiedź serwera niesie nowe wersje punktów – podmieniamy je, nie ruszając kolejności. */
   const saveOrder = useCallback(() => {
+    pendingOrderSavesRef.current++
     orderQueueRef.current = orderQueueRef.current.then(async () => {
       const ids = itemsRef.current?.map((i) => i.id)
-      if (!ids) return
+      if (!ids) {
+        pendingOrderSavesRef.current--
+        return
+      }
       try {
         const saved = await reorderTodoItems(listId, ids)
         applyItems((current) => (current ? mergeItems(current, saved) : current))
@@ -217,9 +273,12 @@ export function TodoListView({ list, onCountsChange, onRename, onDelete, onShare
             : 'Nie udało się zapisać kolejności.',
         )
         await loadItems()
+      } finally {
+        pendingOrderSavesRef.current--
+        runDeferredRefresh()
       }
     })
-  }, [listId, applyItems, loadItems, onAccessChanged])
+  }, [listId, applyItems, loadItems, onAccessChanged, runDeferredRefresh])
 
   const handleMove = (from: number, to: number) => {
     const current = itemsRef.current
@@ -231,6 +290,7 @@ export function TodoListView({ list, onCountsChange, onRename, onDelete, onShare
 
   const handleDragStart = (item: TodoItem) => {
     dragStartOrderRef.current = itemsRef.current?.map((i) => i.id).join(',') ?? ''
+    draggingRef.current = true
     setDraggedId(item.id)
   }
 
@@ -245,11 +305,14 @@ export function TodoListView({ list, onCountsChange, onRename, onDelete, onShare
   }
 
   const handleDragEnd = () => {
+    draggingRef.current = false
     setDraggedId(null)
     const order = itemsRef.current?.map((i) => i.id).join(',') ?? ''
     if (order !== dragStartOrderRef.current) {
       setActionError(null)
       saveOrder()
+    } else {
+      runDeferredRefresh()
     }
   }
 
@@ -342,6 +405,7 @@ export function TodoListView({ list, onCountsChange, onRename, onDelete, onShare
                 count={items.length}
                 dragging={item.id === draggedId}
                 readOnly={readOnly}
+                changedBy={changedItems[item.id]}
                 onToggle={(i) => void handleToggle(i)}
                 onRename={handleRename}
                 onDelete={(i) => void handleDelete(i)}

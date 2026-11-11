@@ -7,7 +7,8 @@ export default defineConfig({
   server: {
     port: 5173,
     proxy: {
-      '/api': 'http://localhost:5196',
+      // ws: true – przepuszcza też połączenie WebSocket do huba list (/api/hubs/todo-lists).
+      '/api': { target: 'http://localhost:5196', ws: true },
     },
   },
 })
