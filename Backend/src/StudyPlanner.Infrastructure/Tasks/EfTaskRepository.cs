@@ -7,25 +7,20 @@ namespace StudyPlanner.Infrastructure.Tasks;
 
 public sealed class EfTaskRepository(AppDbContext db) : ITaskRepository
 {
-    public async Task<IReadOnlyList<TaskItem>> GetByScheduleAsync(Guid scheduleId, Guid userId, IReadOnlyList<Guid> tagIds, CancellationToken cancellationToken)
+    public async Task<IReadOnlyList<TaskItem>> GetByScheduleAsync(Guid scheduleId, IReadOnlyList<Guid> tagIds, CancellationToken cancellationToken)
     {
-        var q = db.Tasks
-            .AsNoTracking()
-            .Where(t => t.ScheduleId == scheduleId && t.UserId == userId);
+        var query = db.Tasks.Where(t => t.ScheduleId == scheduleId);
 
         foreach (var tagId in tagIds)
         {
-            q = q.Where(t => db.TaskTags.Any(tt => tt.TaskId == t.Id && tt.TagId == tagId));
+            query = query.Where(t => db.TaskTags.Any(tt => tt.TaskId == t.Id && tt.TagId == tagId));
         }
 
-        return await q.ToListAsync(cancellationToken);
+        return await query.ToListAsync(cancellationToken);
     }
 
-    public Task<TaskItem?> GetByIdAsync(Guid id, Guid userId, CancellationToken cancellationToken)
-    {
-        // Śledzony przez kontekst – TaskService zmienia go i zapisuje przez UpdateAsync.
-        return db.Tasks.FirstOrDefaultAsync(t => t.Id == id && t.UserId == userId, cancellationToken);
-    }
+    public Task<TaskItem?> GetByIdAsync(Guid id, CancellationToken cancellationToken) =>
+        db.Tasks.FirstOrDefaultAsync(t => t.Id == id, cancellationToken);
 
     public async Task AddAsync(TaskItem task, CancellationToken cancellationToken)
     {

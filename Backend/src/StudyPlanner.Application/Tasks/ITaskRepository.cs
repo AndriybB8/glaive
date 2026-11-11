@@ -4,10 +4,10 @@ namespace StudyPlanner.Application.Tasks;
 
 public interface ITaskRepository
 {
-    Task<IReadOnlyList<TaskItem>> GetByScheduleAsync(Guid scheduleId, Guid userId, IReadOnlyList<Guid> tagIds, CancellationToken cancellationToken);
+    Task<IReadOnlyList<TaskItem>> GetByScheduleAsync(Guid scheduleId, IReadOnlyList<Guid> tagIds, CancellationToken cancellationToken);
 
     /// <summary>Zwraca zadanie tylko wtedy, gdy należy do podanego użytkownika.</summary>
-    Task<TaskItem?> GetByIdAsync(Guid id, Guid userId, CancellationToken cancellationToken);
+    Task<TaskItem?> GetByIdAsync(Guid id, CancellationToken cancellationToken);
 
     Task AddAsync(TaskItem task, CancellationToken cancellationToken);
 

@@ -3,6 +3,7 @@ namespace StudyPlanner.Application.TaskTags;
 public enum TaskTagErrorType
 {
     NotFound,
+    Forbidden
 }
 
 public sealed record TaskTagError(TaskTagErrorType Type, string Message);

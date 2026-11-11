@@ -5,6 +5,7 @@ public enum TaskErrorType
     NotFound,
     Validation,
     Conflict,
+    Forbidden
 }
 
 /// <param name="Current">Przy konflikcie: aktualna wersja zadania z serwera.</param>
