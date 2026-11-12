@@ -38,7 +38,8 @@ interface ScheduleFormDialogProps {
   /** Brak = tworzenie nowego harmonogramu. */
   schedule?: Schedule
   onClose: () => void
-  onSaved: (schedule: Schedule) => void
+  /** `share` – przy tworzeniu zaznaczono „Harmonogram wspólny”: po zapisie otwiera się zapraszanie osób. */
+  onSaved: (schedule: Schedule, share?: boolean) => void
   /** Serwer zgłosił, że harmonogram zmieniono lub usunięto w innym miejscu – lista powinna to odzwierciedlić. */
   onChangedElsewhere: (current: Schedule | { deletedId: string }) => void
 }
@@ -53,7 +54,9 @@ export function ScheduleFormDialog({ schedule, onClose, onSaved, onChangedElsewh
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
   const [conflict, setConflict] = useState<Schedule | null>(null)
+  const [shared, setShared] = useState(false)
   const rangeErrorId = useId()
+  const sharedHintId = useId()
 
   const errors = showErrors ? validate(draft) : {}
   const days = draft.startDate && draft.endDate && draft.endDate >= draft.startDate ? countDays(draft.startDate, draft.endDate) : null
@@ -69,7 +72,7 @@ export function ScheduleFormDialog({ schedule, onClose, onSaved, onChangedElsewh
     setConflict(null)
     try {
       const saved = schedule ? await updateSchedule(schedule.id, draft, versionToSend) : await createSchedule(draft)
-      onSaved(saved)
+      onSaved(saved, !schedule && shared)
     } catch (error) {
       if (isScheduleConflict(error)) {
         setConflict(error.current)
@@ -157,6 +160,24 @@ export function ScheduleFormDialog({ schedule, onClose, onSaved, onChangedElsewh
           days !== null && <p className="text-sm text-slate-500">Czas trwania: {formatDays(days)}</p>
         )}
       </div>
+
+      {!schedule && (
+        <label className="flex cursor-pointer items-start gap-3 rounded-md border border-slate-200 p-3">
+          <input
+            type="checkbox"
+            checked={shared}
+            onChange={(event) => setShared(event.target.checked)}
+            aria-describedby={sharedHintId}
+            className="mt-0.5 size-5 shrink-0 cursor-pointer accent-blue-600"
+          />
+          <span className="flex flex-col gap-0.5">
+            <span className="text-sm font-medium text-slate-900">Harmonogram wspólny</span>
+            <span id={sharedHintId} className="text-sm text-slate-500">
+              Po utworzeniu zaprosisz osoby, które będą widzieć zadania albo je edytować.
+            </span>
+          </span>
+        </label>
+      )}
 
       {conflict && (
         <Alert

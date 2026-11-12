@@ -4,7 +4,11 @@ namespace StudyPlanner.Application.Schedules;
 
 public interface IScheduleRepository
 {
-    Task<IReadOnlyList<Schedule>> GetByUserAsync(Guid userId, CancellationToken cancellationToken);
+    /// <summary>
+    /// Harmonogramy użytkownika oraz te, do których przyjął zaproszenie – razem z jego dostępem.
+    /// Oczekujące zaproszenia nie dają dostępu, więc ich harmonogramów tu nie ma.
+    /// </summary>
+    Task<IReadOnlyList<ScheduleWithAccess>> GetAccessibleByUserAsync(Guid userId, CancellationToken cancellationToken);
 
     /// <summary>Zwraca harmonogram tylko wtedy, gdy należy do podanego użytkownika.</summary>
     Task<Schedule?> GetByIdAsync(Guid id, Guid userId, CancellationToken cancellationToken);
