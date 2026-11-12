@@ -7,12 +7,27 @@ namespace StudyPlanner.Infrastructure.Schedules;
 
 public sealed class EfScheduleRepository(AppDbContext db) : IScheduleRepository
 {
-    public async Task<IReadOnlyList<Schedule>> GetByUserAsync(Guid userId, CancellationToken cancellationToken)
+    public async Task<IReadOnlyList<ScheduleWithAccess>> GetAccessibleByUserAsync(Guid userId, CancellationToken cancellationToken)
     {
-        return await db.Schedules
+        var rows = await db.Schedules
             .AsNoTracking()
-            .Where(s => s.UserId == userId)
+            .Where(s => s.UserId == userId
+                || db.ScheduleMembers.Any(m => m.ScheduleId == s.Id && m.UserId == userId && m.AcceptedAt != null))
+            .Select(s => new
+            {
+                Schedule = s,
+                Role = db.ScheduleMembers
+                    .Where(m => m.ScheduleId == s.Id && m.UserId == userId && m.AcceptedAt != null)
+                    .Select(m => (ScheduleMemberRole?)m.Role)
+                    .FirstOrDefault(),
+            })
             .ToListAsync(cancellationToken);
+
+        return rows
+            .Select(row => (row.Schedule, Access: ToAccess(row.Schedule, userId, row.Role)))
+            .Where(row => row.Access is not null)
+            .Select(row => new ScheduleWithAccess(row.Schedule, row.Access!.Value))
+            .ToList();
     }
 
     public Task<Schedule?> GetByIdAsync(Guid id, Guid userId, CancellationToken cancellationToken)

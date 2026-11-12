@@ -2,7 +2,10 @@ using StudyPlanner.Domain.Schedules;
 
 namespace StudyPlanner.Application.Schedules;
 
-/// <summary>Daty zakresu w JSON mają postać "yyyy-MM-dd".</summary>
+/// <summary>
+/// Daty zakresu w JSON mają postać "yyyy-MM-dd". <paramref name="Access"/> to dostęp bieżącego użytkownika
+/// ("owner", "editor", "viewer") – frontend ukrywa po nim edycję w harmonogramach udostępnionych.
+/// </summary>
 public sealed record ScheduleDto(
     Guid Id,
     string Name,
@@ -10,10 +13,12 @@ public sealed record ScheduleDto(
     DateOnly EndDate,
     DateTime CreatedAt,
     DateTime UpdatedAt,
-    int Version)
+    int Version,
+    ScheduleAccess Access)
 {
-    public static ScheduleDto From(Schedule schedule) =>
-        new(schedule.Id, schedule.Name, schedule.StartDate, schedule.EndDate, schedule.CreatedAt, schedule.UpdatedAt, schedule.Version);
+    /// <summary>Bez <paramref name="access"/> – właściciel (tworzenie, edycja i konflikty dotyczą tylko jego).</summary>
+    public static ScheduleDto From(Schedule schedule, ScheduleAccess access = ScheduleAccess.Owner) =>
+        new(schedule.Id, schedule.Name, schedule.StartDate, schedule.EndDate, schedule.CreatedAt, schedule.UpdatedAt, schedule.Version, access);
 }
 
 /// <summary>Pola są opcjonalne, żeby brak wartości dało się zgłosić czytelnym komunikatem walidacji.</summary>

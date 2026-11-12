@@ -136,7 +136,8 @@ export function TaskFormDialog({ schedule, task, onClose, onSaved, onChangedElse
       } else if (task && error instanceof ApiError && error.status === 404) {
         setSaveError('To zadanie zostało w międzyczasie usunięte.')
         onChangedElsewhere({ deletedId: task.id })
-      } else if (error instanceof ApiError && (error.status === 400 || error.status === 404)) {
+      } else if (error instanceof ApiError && (error.status === 400 || error.status === 403 || error.status === 404)) {
+        // 403: harmonogram wspólny, a właściciel zmienił nam uprawnienia na „Podgląd”.
         setSaveError(error.message)
       } else {
         setSaveError('Nie udało się zapisać zadania. Spróbuj ponownie.')

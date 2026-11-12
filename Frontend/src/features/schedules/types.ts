@@ -1,3 +1,5 @@
+import type { SharedAccess } from '../sharing/types'
+
 export interface Schedule {
   id: string
   name: string
@@ -8,6 +10,11 @@ export interface Schedule {
   createdAt: string
   updatedAt: string
   version: number
+  /**
+   * Dostęp bieżącego użytkownika: `owner` – własny, `editor` / `viewer` – wspólny (po przyjęciu zaproszenia).
+   * Nazwę, daty i udostępnianie zmienia tylko właściciel; zadania – właściciel i `editor`.
+   */
+  access: SharedAccess
 }
 
 export interface ScheduleDraft {
@@ -17,3 +24,12 @@ export interface ScheduleDraft {
 }
 
 export type ScheduleStatus = 'ongoing' | 'upcoming' | 'finished'
+
+/** Zaproszenie bieżącego użytkownika do cudzego harmonogramu (GET /api/schedule-invitations). */
+export interface ScheduleInvitation {
+  scheduleId: string
+  scheduleName: string
+  ownerEmail: string
+  role: 'viewer' | 'editor'
+  invitedAt: string
+}

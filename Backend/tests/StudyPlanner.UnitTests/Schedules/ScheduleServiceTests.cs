@@ -379,6 +379,50 @@ public class ScheduleMemberServiceTests
     }
 
     [Fact]
+    public async Task SchedulesList_ShowsOwnScheduleAsOwner()
+    {
+        var schedules = new ScheduleService(_schedules, _currentUser, _time);
+
+        var listed = Assert.Single(await schedules.GetAllAsync(CancellationToken.None));
+
+        Assert.Equal(_schedule.Id, listed.Id);
+        Assert.Equal(ScheduleAccess.Owner, listed.Access);
+    }
+
+    [Theory]
+    [InlineData(ScheduleMemberRole.Viewer, ScheduleAccess.Viewer)]
+    [InlineData(ScheduleMemberRole.Editor, ScheduleAccess.Editor)]
+    public async Task SchedulesList_ShowsSharedScheduleOnlyAfterAccepting(ScheduleMemberRole role, ScheduleAccess expected)
+    {
+        var schedules = new ScheduleService(_schedules, _currentUser, _time);
+        await InviteAsync(role: role);
+        _currentUser.UserId = _friend.Id;
+
+        Assert.Empty(await schedules.GetAllAsync(CancellationToken.None));
+        Assert.False((await schedules.GetByIdAsync(_schedule.Id, CancellationToken.None)).IsSuccess);
+
+        await _service.AcceptInvitationAsync(_schedule.Id, CancellationToken.None);
+
+        var listed = Assert.Single(await schedules.GetAllAsync(CancellationToken.None));
+        Assert.Equal(_schedule.Id, listed.Id);
+        Assert.Equal(expected, listed.Access);
+        var byId = await schedules.GetByIdAsync(_schedule.Id, CancellationToken.None);
+        Assert.True(byId.IsSuccess);
+        Assert.Equal(expected, byId.Value!.Access);
+    }
+
+    [Fact]
+    public async Task SchedulesList_AfterLeaving_NoLongerShowsSharedSchedule()
+    {
+        var schedules = new ScheduleService(_schedules, _currentUser, _time);
+        await AcceptedFriendAsync();
+
+        await _service.RemoveAsync(_schedule.Id, _friend.Id, CancellationToken.None);
+
+        Assert.Empty(await schedules.GetAllAsync(CancellationToken.None));
+    }
+
+    [Fact]
     public async Task Accept_Twice_KeepsFirstDateAndDoesNotSaveAgain()
     {
         await AcceptedFriendAsync();
@@ -490,8 +534,15 @@ public class ScheduleMemberServiceTests
 
         public List<ScheduleMember> Members { get; set; } = [];
 
-        public Task<IReadOnlyList<Schedule>> GetByUserAsync(Guid userId, CancellationToken cancellationToken) =>
-            throw new NotSupportedException();
+        public Task<IReadOnlyList<ScheduleWithAccess>> GetAccessibleByUserAsync(Guid userId, CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlyList<ScheduleWithAccess>>(Schedules
+                .Select(s => s.UserId == userId
+                    ? new ScheduleWithAccess(s, ScheduleAccess.Owner)
+                    : Members.FirstOrDefault(m => m.ScheduleId == s.Id && m.UserId == userId && m.AcceptedAt != null) is { } member
+                        ? new ScheduleWithAccess(s, member.Role.ToAccess())
+                        : null)
+                .OfType<ScheduleWithAccess>()
+                .ToList());
 
         public Task<Schedule?> GetByIdAsync(Guid id, Guid userId, CancellationToken cancellationToken) =>
             throw new NotSupportedException();

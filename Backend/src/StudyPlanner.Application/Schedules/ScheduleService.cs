@@ -7,26 +7,29 @@ public sealed class ScheduleService(IScheduleRepository repository, ICurrentUser
 {
     private static readonly ScheduleError NotFound = new(ScheduleErrorType.NotFound, "Nie znaleziono harmonogramu.");
 
-    /// <summary>Harmonogramy posortowane od najwcześniej zaczynających się.</summary>
+    /// <summary>
+    /// Własne harmonogramy i wspólne (po przyjęciu zaproszenia), posortowane od najwcześniej zaczynających się.
+    /// </summary>
     public async Task<IReadOnlyList<ScheduleDto>> GetAllAsync(CancellationToken cancellationToken)
     {
-        var schedules = await repository.GetByUserAsync(currentUser.UserId, cancellationToken);
+        var schedules = await repository.GetAccessibleByUserAsync(currentUser.UserId, cancellationToken);
 
         return schedules
-            .OrderBy(s => s.StartDate)
-            .ThenBy(s => s.EndDate)
-            .ThenBy(s => s.Name, StringComparer.CurrentCultureIgnoreCase)
-            .Select(ScheduleDto.From)
+            .OrderBy(s => s.Schedule.StartDate)
+            .ThenBy(s => s.Schedule.EndDate)
+            .ThenBy(s => s.Schedule.Name, StringComparer.CurrentCultureIgnoreCase)
+            .Select(s => ScheduleDto.From(s.Schedule, s.Access))
             .ToList();
     }
 
+    /// <summary>Także dla członka wspólnego harmonogramu – zmiana nazwy, dat i usuwanie zostają tylko dla właściciela.</summary>
     public async Task<ScheduleResult<ScheduleDto>> GetByIdAsync(Guid id, CancellationToken cancellationToken)
     {
-        var schedule = await repository.GetByIdAsync(id, currentUser.UserId, cancellationToken);
+        var found = await repository.GetWithAccessAsync(id, currentUser.UserId, cancellationToken);
 
-        return schedule is null
+        return found is null
             ? ScheduleResult<ScheduleDto>.Failure(NotFound)
-            : ScheduleResult<ScheduleDto>.Success(ScheduleDto.From(schedule));
+            : ScheduleResult<ScheduleDto>.Success(ScheduleDto.From(found.Schedule, found.Access));
     }
 
     public async Task<ScheduleResult<ScheduleDto>> CreateAsync(CreateScheduleRequest request, CancellationToken cancellationToken)

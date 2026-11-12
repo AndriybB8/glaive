@@ -3,12 +3,13 @@ import { Alert } from '../../components/ui/Alert'
 import { Badge } from '../../components/ui/Badge'
 import { Button } from '../../components/ui/Button'
 import { IconButton } from '../../components/ui/IconButton'
-import { PencilIcon, TrashIcon } from '../../components/ui/icons'
+import { PencilIcon, TrashIcon, UserPlusIcon } from '../../components/ui/icons'
 import { ProgressBar } from '../../components/ui/ProgressBar'
 import { ApiError } from '../../lib/http'
 import { downloadPdf, toPdfFileName } from '../../lib/pdf'
 import { countDays, formatDate, formatDateRange, formatDays, todayIso } from '../schedules/scheduleDates'
 import type { Schedule } from '../schedules/types'
+import { ACCESS_LABELS } from '../sharing/sharing'
 import { getTags } from '../tags/api'
 import { TagChip } from '../tags/TagChip'
 import type { Tag } from '../tags/types'
@@ -34,9 +35,11 @@ interface TaskRowProps {
   onStatusChange: (status: TaskStatus) => void
   onEdit: () => void
   onDelete: () => void
+  /** Harmonogram wspólny z uprawnieniem „Podgląd” – bez zmiany statusu, edycji i usuwania. */
+  readOnly?: boolean
 }
 
-function TaskRow({ task, tags, today, onStatusChange, onEdit, onDelete }: TaskRowProps) {
+function TaskRow({ task, tags, today, onStatusChange, onEdit, onDelete, readOnly = false }: TaskRowProps) {
   const done = task.status === 'done'
   const priority = priorityBadges[task.priority]
 
@@ -76,24 +79,30 @@ function TaskRow({ task, tags, today, onStatusChange, onEdit, onDelete }: TaskRo
         )}
       </div>
       <div className="ml-auto flex shrink-0 items-center gap-1 sm:gap-0.5">
-        <select
-          value={task.status}
-          onChange={(event) => onStatusChange(event.target.value as TaskStatus)}
-          aria-label={`Status zadania „${task.title}”`}
-          className="mr-1 h-11 rounded-md border border-slate-300 bg-white px-2 text-sm text-slate-700 focus:border-blue-600 focus:outline-2 focus:-outline-offset-1 focus:outline-blue-600 sm:h-8"
-        >
-          {statusOptions.map((option) => (
-            <option key={option.value} value={option.value}>
-              {option.label}
-            </option>
-          ))}
-        </select>
-        <IconButton label={`Edytuj „${task.title}”`} title="Edytuj" touch onClick={onEdit}>
-          <PencilIcon />
-        </IconButton>
-        <IconButton label={`Usuń „${task.title}”`} title="Usuń" tone="danger" touch onClick={onDelete}>
-          <TrashIcon />
-        </IconButton>
+        {readOnly ? (
+          <span className="mr-1 text-sm text-slate-600">{statusOptions.find((o) => o.value === task.status)?.label}</span>
+        ) : (
+          <>
+            <select
+              value={task.status}
+              onChange={(event) => onStatusChange(event.target.value as TaskStatus)}
+              aria-label={`Status zadania „${task.title}”`}
+              className="mr-1 h-11 rounded-md border border-slate-300 bg-white px-2 text-sm text-slate-700 focus:border-blue-600 focus:outline-2 focus:-outline-offset-1 focus:outline-blue-600 sm:h-8"
+            >
+              {statusOptions.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+            <IconButton label={`Edytuj „${task.title}”`} title="Edytuj" touch onClick={onEdit}>
+              <PencilIcon />
+            </IconButton>
+            <IconButton label={`Usuń „${task.title}”`} title="Usuń" tone="danger" touch onClick={onDelete}>
+              <TrashIcon />
+            </IconButton>
+          </>
+        )}
       </div>
     </li>
   )
@@ -102,10 +111,21 @@ function TaskRow({ task, tags, today, onStatusChange, onEdit, onDelete }: TaskRo
 interface ScheduleTasksPageProps {
   schedule: Schedule
   onBack: () => void
+  /** Okno udostępniania – tylko właściciel. */
+  onShare: () => void
+  /** Opuszczenie wspólnego (cudzego) harmonogramu. */
+  onLeave: () => void
+  /** Serwer odmówił (403) – uprawnienia zmieniły się w międzyczasie; lista harmonogramów powinna je wczytać od nowa. */
+  onAccessChanged: () => void
 }
 
-/** Zadania jednego harmonogramu z paskiem postępu. Postęp = zadania „Zrobione” / wszystkie. */
-export function ScheduleTasksPage({ schedule, onBack }: ScheduleTasksPageProps) {
+/**
+ * Zadania jednego harmonogramu z paskiem postępu. Postęp = zadania „Zrobione” / wszystkie.
+ * W harmonogramie wspólnym z uprawnieniem „Podgląd” zadania są tylko do odczytu.
+ */
+export function ScheduleTasksPage({ schedule, onBack, onShare, onLeave, onAccessChanged }: ScheduleTasksPageProps) {
+  const isOwner = schedule.access === 'owner'
+  const readOnly = schedule.access === 'viewer'
   const [tasks, setTasks] = useState<Task[] | null>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [actionError, setActionError] = useState<string | null>(null)
@@ -245,6 +265,11 @@ export function ScheduleTasksPage({ schedule, onBack }: ScheduleTasksPageProps) 
       if (error instanceof ApiError && error.status === 404) {
         removeTask(task.id)
         setActionError('To zadanie zostało usunięte w innym miejscu.')
+      } else if (error instanceof ApiError && error.status === 403) {
+        // Właściciel zmienił nam uprawnienia na „Podgląd”.
+        replaceTask(task)
+        setActionError(error.message)
+        onAccessChanged()
       } else {
         replaceTask(task)
         setActionError('Nie udało się zmienić statusu zadania.')
@@ -299,14 +324,31 @@ export function ScheduleTasksPage({ schedule, onBack }: ScheduleTasksPageProps) 
           <Button variant="secondary" onClick={() => void handleExportPdf()} disabled={tasks === null || exporting}>
             {exporting ? 'Generowanie…' : 'Pobierz PDF'}
           </Button>
-          <Button onClick={() => setDialog({ kind: 'create' })} disabled={loadError === SCHEDULE_GONE}>
-            Nowe zadanie
-          </Button>
+          {isOwner ? (
+            <IconButton label={`Udostępnij „${schedule.name}”`} title="Udostępnij" touch onClick={onShare}>
+              <UserPlusIcon />
+            </IconButton>
+          ) : (
+            <Button variant="ghost-danger" onClick={onLeave}>
+              Opuść
+            </Button>
+          )}
+          {!readOnly && (
+            <Button onClick={() => setDialog({ kind: 'create' })} disabled={loadError === SCHEDULE_GONE}>
+              Nowe zadanie
+            </Button>
+          )}
         </div>
       </header>
       <p className="text-sm text-slate-500 tabular-nums">
         {formatDateRange(schedule.startDate, schedule.endDate)} · {formatDays(countDays(schedule.startDate, schedule.endDate))}
       </p>
+      {!isOwner && (
+        <p className="mt-2 flex flex-wrap items-center gap-2 text-sm text-slate-600">
+          <Badge tone="blue">Wspólny · {ACCESS_LABELS[schedule.access]}</Badge>
+          {readOnly ? 'Możesz tylko przeglądać zadania.' : 'Możesz dodawać i zmieniać zadania.'}
+        </p>
+      )}
 
       {loadError ? (
         <div className="mt-6 text-sm text-slate-600">
@@ -357,7 +399,9 @@ export function ScheduleTasksPage({ schedule, onBack }: ScheduleTasksPageProps) 
           )}
 
           {tasks.length === 0 ? (
-            <p className="mt-6 text-sm text-slate-600">Ten harmonogram nie ma jeszcze zadań. Dodaj pierwsze przyciskiem powyżej.</p>
+            <p className="mt-6 text-sm text-slate-600">
+              {readOnly ? 'Ten harmonogram nie ma jeszcze zadań.' : 'Ten harmonogram nie ma jeszcze zadań. Dodaj pierwsze przyciskiem powyżej.'}
+            </p>
           ) : filterActive && visibleTasks?.length === 0 && filterStatus === 'idle' ? (
             <p className="mt-6 text-sm text-slate-600">
               {selectedFilterTags.length === 1
@@ -390,6 +434,7 @@ export function ScheduleTasksPage({ schedule, onBack }: ScheduleTasksPageProps) 
                         onStatusChange={(status) => void handleStatusChange(task, status)}
                         onEdit={() => setDialog({ kind: 'edit', task })}
                         onDelete={() => setDialog({ kind: 'delete', task })}
+                        readOnly={readOnly}
                       />
                     ))}
                   </ul>

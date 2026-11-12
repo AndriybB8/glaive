@@ -255,8 +255,8 @@ public class TaskTagServiceTests
 
         public List<ScheduleMemberStub> Members { get; } = [];
 
-        public Task<IReadOnlyList<Schedule>> GetByUserAsync(Guid userId, CancellationToken cancellationToken) =>
-            Task.FromResult<IReadOnlyList<Schedule>>(Schedules.Where(s => s.UserId == userId).ToList());
+        public Task<IReadOnlyList<ScheduleWithAccess>> GetAccessibleByUserAsync(Guid userId, CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
 
         public Task<Schedule?> GetByIdAsync(Guid id, Guid userId, CancellationToken cancellationToken) =>
             Task.FromResult(Schedules.FirstOrDefault(s => s.Id == id && s.UserId == userId));

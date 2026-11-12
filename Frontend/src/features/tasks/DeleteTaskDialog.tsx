@@ -28,7 +28,8 @@ export function DeleteTaskDialog({ task, onClose, onDeleted }: DeleteTaskDialogP
         onDeleted(task.id)
         return
       }
-      setError('Nie udało się usunąć zadania.')
+      // 403: harmonogram wspólny, a właściciel zmienił nam uprawnienia na „Podgląd”.
+      setError(err instanceof ApiError && err.status === 403 ? err.message : 'Nie udało się usunąć zadania.')
       setDeleting(false)
     }
   }
