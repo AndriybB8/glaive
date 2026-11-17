@@ -9,6 +9,7 @@ namespace StudyPlanner.Application.Tasks;
 public sealed class TaskService(
     ITaskRepository tasks,
     IScheduleRepository schedules,
+    IScheduleNotifier notifier,
     ICurrentUser currentUser,
     TimeProvider timeProvider)
 {
@@ -71,6 +72,7 @@ public sealed class TaskService(
 
         var task = TaskItem.Create(schedule.UserId, schedule.Id, title, description, request.DueDate, priority, status, UtcNow());
         await tasks.AddAsync(task, cancellationToken);
+        await NotifyAsync(ScheduleChangeKind.TaskCreated, task);
 
         return TaskResult<TaskDto>.Success(TaskDto.From(task));
     }
@@ -160,6 +162,8 @@ public sealed class TaskService(
         }
 
         await tasks.DeleteAsync(found.Value.Task, cancellationToken);
+        await NotifyAsync(ScheduleChangeKind.TaskDeleted, found.Value.Task);
+
         return TaskResult<bool>.Success(true);
     }
 
@@ -189,8 +193,13 @@ public sealed class TaskService(
                 : TaskResult<TaskDto>.Failure(Conflict(current));
         }
 
+        await NotifyAsync(ScheduleChangeKind.TaskUpdated, task);
+
         return TaskResult<TaskDto>.Success(TaskDto.From(task));
     }
+
+    private Task NotifyAsync(ScheduleChangeKind kind, TaskItem task) =>
+        notifier.ScheduleChangedAsync(new ScheduleChange(task.ScheduleId, kind, task.Id, task.Title));
 
     private DateTime UtcNow() => timeProvider.GetUtcNow().UtcDateTime;
 

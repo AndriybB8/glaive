@@ -7,7 +7,13 @@ using StudyPlanner.Domain.Tasks;
 
 namespace StudyPlanner.Application.TaskTags;
 
-public class TaskTagService(ITaskTagRepository taskTags, ITaskRepository tasks, ITagRepository tags, IScheduleRepository schedules, ICurrentUser currentUser)
+public class TaskTagService(
+    ITaskTagRepository taskTags,
+    ITaskRepository tasks,
+    ITagRepository tags,
+    IScheduleRepository schedules,
+    IScheduleNotifier notifier,
+    ICurrentUser currentUser)
 {
     public async Task<TaskTagResult<IReadOnlyList<Tag>>> GetTagsForTaskAsync(Guid taskId, CancellationToken cancellationToken)
     {
@@ -28,8 +34,12 @@ public class TaskTagService(ITaskTagRepository taskTags, ITaskRepository tasks, 
         if (tag is null)
             return TaskTagResult<bool>.Failure(new(TaskTagErrorType.NotFound, "Nie znaleziono tagu."));
 
+        // Ponowne przypisanie niczego nie zmienia, więc nikogo nie powiadamia.
         if (!await taskTags.ExistsAsync(taskId, tagId, cancellationToken))
+        {
             await taskTags.AssignAsync(taskId, tagId, cancellationToken);
+            await NotifyAsync(found.Value.Task);
+        }
 
         return TaskTagResult<bool>.Success(true);
     }
@@ -43,9 +53,17 @@ public class TaskTagService(ITaskTagRepository taskTags, ITaskRepository tasks, 
         var tag = await tags.GetByIdAsync(tagId, currentUser.UserId, cancellationToken);
         if (tag is null) return TaskTagResult<bool>.Failure(new TaskTagError(TaskTagErrorType.NotFound, "Nie znaleziono tagu."));
 
-        await taskTags.UnassignAsync(taskId, tagId, cancellationToken);
+        if (await taskTags.ExistsAsync(taskId, tagId, cancellationToken))
+        {
+            await taskTags.UnassignAsync(taskId, tagId, cancellationToken);
+            await NotifyAsync(found.Value.Task);
+        }
+
         return TaskTagResult<bool>.Success(true);
     }
+
+    private Task NotifyAsync(TaskItem task) =>
+        notifier.ScheduleChangedAsync(new ScheduleChange(task.ScheduleId, ScheduleChangeKind.TaskTagsChanged, task.Id, task.Title));
 
     private async Task<(TaskItem Task, AccessRole Access)?> FindTaskAsync(Guid taskId, CancellationToken cancellationToken)
     {

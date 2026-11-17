@@ -3,7 +3,11 @@ using StudyPlanner.Domain.Schedules;
 
 namespace StudyPlanner.Application.Schedules;
 
-public sealed class ScheduleService(IScheduleRepository repository, ICurrentUser currentUser, TimeProvider timeProvider)
+public sealed class ScheduleService(
+    IScheduleRepository repository,
+    IScheduleNotifier notifier,
+    ICurrentUser currentUser,
+    TimeProvider timeProvider)
 {
     private static readonly ScheduleError NotFound = new(ScheduleErrorType.NotFound, "Nie znaleziono harmonogramu.");
     private static readonly ScheduleError Forbidden = new(ScheduleErrorType.Forbidden, "Tylko właściciel może zmienić harmonogram albo go usunąć.");
@@ -99,6 +103,8 @@ public sealed class ScheduleService(IScheduleRepository repository, ICurrentUser
                 : ScheduleResult<ScheduleDto>.Failure(Conflict(current.Schedule));
         }
 
+        await notifier.ScheduleChangedAsync(new ScheduleChange(schedule.Id, ScheduleChangeKind.ScheduleUpdated, ScheduleName: schedule.Name));
+
         return ScheduleResult<ScheduleDto>.Success(ScheduleDto.From(schedule));
     }
 
@@ -116,7 +122,14 @@ public sealed class ScheduleService(IScheduleRepository repository, ICurrentUser
             return ScheduleResult<bool>.Failure(Forbidden);
         }
 
+        // Odbiorców trzeba ustalić przed usunięciem: kaskada usuwa też osoby z dostępem.
+        var recipients = await repository.GetUserIdsWithAccessAsync(id, cancellationToken);
+
         await repository.DeleteAsync(found.Schedule, cancellationToken);
+        await notifier.ScheduleChangedAsync(
+            new ScheduleChange(id, ScheduleChangeKind.ScheduleDeleted, ScheduleName: found.Schedule.Name),
+            recipients);
+
         return ScheduleResult<bool>.Success(true);
     }
 
