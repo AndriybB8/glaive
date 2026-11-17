@@ -258,9 +258,6 @@ public class TaskTagServiceTests
         public Task<IReadOnlyList<ScheduleWithAccess>> GetAccessibleByUserAsync(Guid userId, CancellationToken cancellationToken) =>
             throw new NotSupportedException();
 
-        public Task<Schedule?> GetByIdAsync(Guid id, Guid userId, CancellationToken cancellationToken) =>
-            Task.FromResult(Schedules.FirstOrDefault(s => s.Id == id && s.UserId == userId));
-
         public Task AddAsync(Schedule schedule, CancellationToken cancellationToken)
         {
             Schedules.Add(schedule);
@@ -284,7 +281,7 @@ public class TaskTagServiceTests
             }
 
             var access = schedule.UserId == userId
-                ? ScheduleAccess.Owner
+                ? AccessRole.Owner
                 : Members.FirstOrDefault(m => m.ScheduleId == id && m.UserId == userId)?.Role.ToAccess();
 
             return Task.FromResult(access is { } value ? new ScheduleWithAccess(schedule, value) : null);

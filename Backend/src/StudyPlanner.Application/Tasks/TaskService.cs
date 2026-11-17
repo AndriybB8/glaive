@@ -53,7 +53,7 @@ public sealed class TaskService(
             return TaskResult<TaskDto>.Failure(ScheduleNotFound);
         }
 
-        if (!scheduleWithAccess.Access.CanEditTasks())
+        if (!scheduleWithAccess.Access.Can(Permission.EditContent))
         {
             return TaskResult<TaskDto>.Failure(Forbidden);
         }
@@ -84,7 +84,7 @@ public sealed class TaskService(
         }
 
         var (task, schedule, access) = found.Value;
-        if (!access.CanEditTasks())
+        if (!access.Can(Permission.EditContent))
         {
             return TaskResult<TaskDto>.Failure(Forbidden);
         }
@@ -131,7 +131,7 @@ public sealed class TaskService(
             return TaskResult<TaskDto>.Failure(TaskNotFound);
         }
 
-        if (!found.Value.Access.CanEditTasks())
+        if (!found.Value.Access.Can(Permission.EditContent))
         {
             return TaskResult<TaskDto>.Failure(Forbidden);
         }
@@ -154,7 +154,7 @@ public sealed class TaskService(
             return TaskResult<bool>.Failure(TaskNotFound);
         }
 
-        if (!found.Value.Access.CanEditTasks())
+        if (!found.Value.Access.Can(Permission.EditContent))
         {
             return TaskResult<bool>.Failure(Forbidden);
         }
@@ -163,7 +163,7 @@ public sealed class TaskService(
         return TaskResult<bool>.Success(true);
     }
 
-    private async Task<(TaskItem Task, Schedule Schedule, ScheduleAccess Access)?> FindAsync(Guid id, CancellationToken cancellationToken)
+    private async Task<(TaskItem Task, Schedule Schedule, AccessRole Access)?> FindAsync(Guid id, CancellationToken cancellationToken)
     {
         var task = await tasks.GetByIdAsync(id, cancellationToken);
         if (task is null)

@@ -583,7 +583,7 @@ public class TodoItemServiceTests
             }
 
             var access = list.UserId == userId
-                ? TodoListAccess.Owner
+                ? AccessRole.Owner
                 : Members.FirstOrDefault(m => m.ListId == id && m.UserId == userId && m.AcceptedAt != null)?.Role.ToAccess();
 
             return Task.FromResult(access is { } value ? new TodoListWithAccess(list, value) : null);

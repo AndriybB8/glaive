@@ -1,3 +1,4 @@
+using StudyPlanner.Application.Common;
 using StudyPlanner.Domain.TodoLists;
 
 namespace StudyPlanner.Application.TodoLists;
@@ -34,7 +35,7 @@ public interface ITodoListRepository
 /// <param name="ItemCount">Wszystkie punkty listy.</param>
 /// <param name="DoneCount">Punkty oznaczone jako zrobione.</param>
 /// <param name="Access">Dostęp użytkownika, dla którego pobrano listę.</param>
-public sealed record TodoListSummary(TodoList List, int ItemCount, int DoneCount, TodoListAccess Access);
+public sealed record TodoListSummary(TodoList List, int ItemCount, int DoneCount, AccessRole Access);
 
 /// <summary>
 /// Rzucany przez repozytorium przy konflikcie wersji

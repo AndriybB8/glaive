@@ -1,11 +1,12 @@
+using StudyPlanner.Application.Common;
 using StudyPlanner.Domain.TodoLists;
 
 namespace StudyPlanner.Application.TodoLists;
 
 /// <param name="Access">Dostęp bieżącego użytkownika – frontend ukrywa na jego podstawie niedostępne akcje.</param>
-public sealed record TodoListDto(Guid Id, string Title, DateTime CreatedAt, DateTime UpdatedAt, int Version, TodoListAccess Access)
+public sealed record TodoListDto(Guid Id, string Title, DateTime CreatedAt, DateTime UpdatedAt, int Version, AccessRole Access)
 {
-    public static TodoListDto From(TodoList list, TodoListAccess access) =>
+    public static TodoListDto From(TodoList list, AccessRole access) =>
         new(list.Id, list.Title, list.CreatedAt, list.UpdatedAt, list.Version, access);
 }
 
@@ -19,7 +20,7 @@ public sealed record TodoListSummaryDto(
     DateTime CreatedAt,
     DateTime UpdatedAt,
     int Version,
-    TodoListAccess Access)
+    AccessRole Access)
 {
     public static TodoListSummaryDto From(TodoListSummary summary) =>
         new(

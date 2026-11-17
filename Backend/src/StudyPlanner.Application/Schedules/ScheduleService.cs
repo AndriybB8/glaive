@@ -6,6 +6,7 @@ namespace StudyPlanner.Application.Schedules;
 public sealed class ScheduleService(IScheduleRepository repository, ICurrentUser currentUser, TimeProvider timeProvider)
 {
     private static readonly ScheduleError NotFound = new(ScheduleErrorType.NotFound, "Nie znaleziono harmonogramu.");
+    private static readonly ScheduleError Forbidden = new(ScheduleErrorType.Forbidden, "Tylko właściciel może zmienić harmonogram albo go usunąć.");
 
     /// <summary>
     /// Własne harmonogramy i wspólne (po przyjęciu zaproszenia), posortowane od najwcześniej zaczynających się.
@@ -47,6 +48,7 @@ public sealed class ScheduleService(IScheduleRepository repository, ICurrentUser
         return ScheduleResult<ScheduleDto>.Success(ScheduleDto.From(schedule));
     }
 
+    /// <summary>Zmiana nazwy i dat – tylko właściciel.</summary>
     public async Task<ScheduleResult<ScheduleDto>> UpdateAsync(Guid id, UpdateScheduleRequest request, CancellationToken cancellationToken)
     {
         var name = request.Name?.Trim() ?? string.Empty;
@@ -59,11 +61,18 @@ public sealed class ScheduleService(IScheduleRepository repository, ICurrentUser
         var startDate = request.StartDate!.Value;
         var endDate = request.EndDate!.Value;
 
-        var schedule = await repository.GetByIdAsync(id, currentUser.UserId, cancellationToken);
-        if (schedule is null)
+        var found = await repository.GetWithAccessAsync(id, currentUser.UserId, cancellationToken);
+        if (found is null)
         {
             return ScheduleResult<ScheduleDto>.Failure(NotFound);
         }
+
+        if (!found.Access.Can(Permission.Manage))
+        {
+            return ScheduleResult<ScheduleDto>.Failure(Forbidden);
+        }
+
+        var schedule = found.Schedule;
 
         if (schedule.Version != request.Version)
         {
@@ -84,24 +93,30 @@ public sealed class ScheduleService(IScheduleRepository repository, ICurrentUser
         }
         catch (ScheduleConcurrencyException)
         {
-            var current = await repository.GetByIdAsync(id, currentUser.UserId, cancellationToken);
+            var current = await repository.GetWithAccessAsync(id, currentUser.UserId, cancellationToken);
             return current is null
                 ? ScheduleResult<ScheduleDto>.Failure(NotFound)
-                : ScheduleResult<ScheduleDto>.Failure(Conflict(current));
+                : ScheduleResult<ScheduleDto>.Failure(Conflict(current.Schedule));
         }
 
         return ScheduleResult<ScheduleDto>.Success(ScheduleDto.From(schedule));
     }
 
+    /// <summary>Usuwa harmonogram razem z zadaniami i osobami z dostępem – tylko właściciel.</summary>
     public async Task<ScheduleResult<bool>> DeleteAsync(Guid id, CancellationToken cancellationToken)
     {
-        var schedule = await repository.GetByIdAsync(id, currentUser.UserId, cancellationToken);
-        if (schedule is null)
+        var found = await repository.GetWithAccessAsync(id, currentUser.UserId, cancellationToken);
+        if (found is null)
         {
             return ScheduleResult<bool>.Failure(NotFound);
         }
 
-        await repository.DeleteAsync(schedule, cancellationToken);
+        if (!found.Access.Can(Permission.Manage))
+        {
+            return ScheduleResult<bool>.Failure(Forbidden);
+        }
+
+        await repository.DeleteAsync(found.Schedule, cancellationToken);
         return ScheduleResult<bool>.Success(true);
     }
 

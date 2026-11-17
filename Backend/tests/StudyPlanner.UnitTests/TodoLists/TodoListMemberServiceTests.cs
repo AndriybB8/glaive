@@ -38,7 +38,7 @@ public class TodoListMemberServiceTests
     private Task<TodoListResult<TodoListMemberDto>> InviteAsync(string? email = "friend@mail.com", TodoListMemberRole? role = TodoListMemberRole.Viewer) =>
         _service.InviteAsync(_list.Id, new InviteTodoListMemberRequest(email, role), CancellationToken.None);
 
-    private async Task<TodoListAccess?> AccessOfFriendAsync() =>
+    private async Task<AccessRole?> AccessOfFriendAsync() =>
         (await _lists.GetWithAccessAsync(_list.Id, _friend.Id, CancellationToken.None))?.Access;
 
     /// <summary>Zaproszenie od właściciela przyjęte przez _friend; bieżącym użytkownikiem zostaje _friend.</summary>
@@ -220,7 +220,7 @@ public class TodoListMemberServiceTests
 
         Assert.Equal(TodoListMemberRole.Editor, result.Value!.Role);
         Assert.Equal("friend@mail.com", result.Value.Email);
-        Assert.Equal(TodoListAccess.Editor, await AccessOfFriendAsync());
+        Assert.Equal(AccessRole.Editor, await AccessOfFriendAsync());
     }
 
     [Fact]
@@ -362,9 +362,9 @@ public class TodoListMemberServiceTests
     }
 
     [Theory]
-    [InlineData(TodoListMemberRole.Viewer, TodoListAccess.Viewer)]
-    [InlineData(TodoListMemberRole.Editor, TodoListAccess.Editor)]
-    public async Task Accept_GivesAccessFromRole(TodoListMemberRole role, TodoListAccess expected)
+    [InlineData(TodoListMemberRole.Viewer, AccessRole.Viewer)]
+    [InlineData(TodoListMemberRole.Editor, AccessRole.Editor)]
+    public async Task Accept_GivesAccessFromRole(TodoListMemberRole role, AccessRole expected)
     {
         await InviteAsync(role: role);
         _currentUser.UserId = _friend.Id;
@@ -439,7 +439,7 @@ public class TodoListMemberServiceTests
         var result = await _service.DeclineInvitationAsync(_list.Id, CancellationToken.None);
 
         Assert.Equal(TodoListErrorType.NotFound, result.Error!.Type);
-        Assert.Equal(TodoListAccess.Viewer, await AccessOfFriendAsync());
+        Assert.Equal(AccessRole.Viewer, await AccessOfFriendAsync());
     }
 
     private void AssertOnlyMemberChange(TodoListChangeKind kind)
@@ -589,7 +589,7 @@ public class TodoListMemberServiceTests
             }
 
             var access = list.UserId == userId
-                ? TodoListAccess.Owner
+                ? AccessRole.Owner
                 : Members.FirstOrDefault(m => m.ListId == id && m.UserId == userId && m.AcceptedAt != null)?.Role.ToAccess();
 
             return Task.FromResult(access is { } value ? new TodoListWithAccess(list, value) : null);

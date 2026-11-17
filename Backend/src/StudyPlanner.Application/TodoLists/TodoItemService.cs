@@ -52,7 +52,7 @@ public sealed class TodoItemService(
             return TodoItemResult<TodoItemDto>.Failure(ListNotFound);
         }
 
-        if (!list.Access.CanEditItems())
+        if (!list.Access.Can(Permission.EditContent))
         {
             return TodoItemResult<TodoItemDto>.Failure(Forbidden);
         }
@@ -92,7 +92,7 @@ public sealed class TodoItemService(
             return TodoItemResult<TodoItemDto>.Failure(ItemNotFound);
         }
 
-        if (!found.Value.Access.CanEditItems())
+        if (!found.Value.Access.Can(Permission.EditContent))
         {
             return TodoItemResult<TodoItemDto>.Failure(Forbidden);
         }
@@ -130,7 +130,7 @@ public sealed class TodoItemService(
             return TodoItemResult<TodoItemDto>.Failure(ItemNotFound);
         }
 
-        if (!found.Value.Access.CanEditItems())
+        if (!found.Value.Access.Can(Permission.EditContent))
         {
             return TodoItemResult<TodoItemDto>.Failure(Forbidden);
         }
@@ -162,7 +162,7 @@ public sealed class TodoItemService(
             return TodoItemResult<IReadOnlyList<TodoItemDto>>.Failure(ListNotFound);
         }
 
-        if (!list.Access.CanEditItems())
+        if (!list.Access.Can(Permission.EditContent))
         {
             return TodoItemResult<IReadOnlyList<TodoItemDto>>.Failure(Forbidden);
         }
@@ -225,7 +225,7 @@ public sealed class TodoItemService(
             return TodoItemResult<bool>.Failure(ItemNotFound);
         }
 
-        if (!found.Value.Access.CanEditItems())
+        if (!found.Value.Access.Can(Permission.EditContent))
         {
             return TodoItemResult<bool>.Failure(Forbidden);
         }
@@ -237,7 +237,7 @@ public sealed class TodoItemService(
     }
 
     /// <summary>Punkt z dostępem użytkownika do jego listy. Null także wtedy, gdy punkt istnieje, ale użytkownik nie ma dostępu.</summary>
-    private async Task<(TodoItem Item, TodoListAccess Access)?> FindAsync(Guid id, CancellationToken cancellationToken)
+    private async Task<(TodoItem Item, AccessRole Access)?> FindAsync(Guid id, CancellationToken cancellationToken)
     {
         var item = await items.GetByIdAsync(id, cancellationToken);
         if (item is null)

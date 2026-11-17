@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using StudyPlanner.Application.Common;
 using StudyPlanner.Application.Schedules;
 using StudyPlanner.Domain.Schedules;
 using StudyPlanner.Infrastructure.Persistence;
@@ -30,12 +31,6 @@ public sealed class EfScheduleRepository(AppDbContext db) : IScheduleRepository
             .ToList();
     }
 
-    public Task<Schedule?> GetByIdAsync(Guid id, Guid userId, CancellationToken cancellationToken)
-    {
-        // Śledzony przez kontekst – ScheduleService zmienia go i zapisuje przez UpdateAsync.
-        return db.Schedules.FirstOrDefaultAsync(s => s.Id == id && s.UserId == userId, cancellationToken);
-    }
-
     public async Task AddAsync(Schedule schedule, CancellationToken cancellationToken)
     {
         db.Schedules.Add(schedule);
@@ -64,6 +59,7 @@ public sealed class EfScheduleRepository(AppDbContext db) : IScheduleRepository
 
     public async Task<ScheduleWithAccess?> GetWithAccessAsync(Guid id, Guid userId, CancellationToken cancellationToken)
     {
+        // Harmonogram śledzony przez kontekst – ScheduleService zmienia go i zapisuje przez UpdateAsync.
         var row = await db.Schedules
             .Where(s => s.Id == id)
             .Select(s => new
@@ -80,6 +76,6 @@ public sealed class EfScheduleRepository(AppDbContext db) : IScheduleRepository
             new ScheduleWithAccess(row.Schedule, access) : null;
     }
 
-    private static ScheduleAccess? ToAccess(Schedule schedule, Guid userId, ScheduleMemberRole? role) =>
-        schedule.UserId == userId ? ScheduleAccess.Owner : role?.ToAccess();
+    private static AccessRole? ToAccess(Schedule schedule, Guid userId, ScheduleMemberRole? role) =>
+        schedule.UserId == userId ? AccessRole.Owner : role?.ToAccess();
 }

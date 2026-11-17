@@ -39,7 +39,7 @@ public class ScheduleMemberServiceTests
     private Task<ScheduleResult<ScheduleMemberDto>> InviteAsync(string? email = "friend@mail.com", ScheduleMemberRole? role = ScheduleMemberRole.Viewer) =>
         _service.InviteAsync(_schedule.Id, new InviteScheduleMemberRequest(email, role), CancellationToken.None);
 
-    private async Task<ScheduleAccess?> AccessOfFriendAsync() =>
+    private async Task<AccessRole?> AccessOfFriendAsync() =>
         (await _schedules.GetWithAccessAsync(_schedule.Id, _friend.Id, CancellationToken.None))?.Access;
 
     /// <summary>Zaproszenie od właściciela przyjęte przez _friend; bieżącym użytkownikiem zostaje _friend.</summary>
@@ -221,7 +221,7 @@ public class ScheduleMemberServiceTests
 
         Assert.Equal(ScheduleMemberRole.Editor, result.Value!.Role);
         Assert.Equal("friend@mail.com", result.Value.Email);
-        Assert.Equal(ScheduleAccess.Editor, await AccessOfFriendAsync());
+        Assert.Equal(AccessRole.Editor, await AccessOfFriendAsync());
     }
 
     [Fact]
@@ -363,9 +363,9 @@ public class ScheduleMemberServiceTests
     }
 
     [Theory]
-    [InlineData(ScheduleMemberRole.Viewer, ScheduleAccess.Viewer)]
-    [InlineData(ScheduleMemberRole.Editor, ScheduleAccess.Editor)]
-    public async Task Accept_GivesAccessFromRole(ScheduleMemberRole role, ScheduleAccess expected)
+    [InlineData(ScheduleMemberRole.Viewer, AccessRole.Viewer)]
+    [InlineData(ScheduleMemberRole.Editor, AccessRole.Editor)]
+    public async Task Accept_GivesAccessFromRole(ScheduleMemberRole role, AccessRole expected)
     {
         await InviteAsync(role: role);
         _currentUser.UserId = _friend.Id;
@@ -386,13 +386,13 @@ public class ScheduleMemberServiceTests
         var listed = Assert.Single(await schedules.GetAllAsync(CancellationToken.None));
 
         Assert.Equal(_schedule.Id, listed.Id);
-        Assert.Equal(ScheduleAccess.Owner, listed.Access);
+        Assert.Equal(AccessRole.Owner, listed.Access);
     }
 
     [Theory]
-    [InlineData(ScheduleMemberRole.Viewer, ScheduleAccess.Viewer)]
-    [InlineData(ScheduleMemberRole.Editor, ScheduleAccess.Editor)]
-    public async Task SchedulesList_ShowsSharedScheduleOnlyAfterAccepting(ScheduleMemberRole role, ScheduleAccess expected)
+    [InlineData(ScheduleMemberRole.Viewer, AccessRole.Viewer)]
+    [InlineData(ScheduleMemberRole.Editor, AccessRole.Editor)]
+    public async Task SchedulesList_ShowsSharedScheduleOnlyAfterAccepting(ScheduleMemberRole role, AccessRole expected)
     {
         var schedules = new ScheduleService(_schedules, _currentUser, _time);
         await InviteAsync(role: role);
@@ -420,6 +420,62 @@ public class ScheduleMemberServiceTests
         await _service.RemoveAsync(_schedule.Id, _friend.Id, CancellationToken.None);
 
         Assert.Empty(await schedules.GetAllAsync(CancellationToken.None));
+    }
+
+    private UpdateScheduleRequest RenameRequest() => new("Nowa nazwa", Jan25, Feb14, _schedule.Version);
+
+    [Fact]
+    public async Task UpdateAndDelete_ByOwner_Succeed()
+    {
+        var schedules = new ScheduleService(_schedules, _currentUser, _time);
+
+        var updated = await schedules.UpdateAsync(_schedule.Id, RenameRequest(), CancellationToken.None);
+        Assert.True(updated.IsSuccess);
+        Assert.Equal("Nowa nazwa", _schedule.Name);
+        Assert.Equal(AccessRole.Owner, updated.Value!.Access);
+
+        var deleted = await schedules.DeleteAsync(_schedule.Id, CancellationToken.None);
+        Assert.True(deleted.IsSuccess);
+        Assert.DoesNotContain(_schedule, _schedules.Schedules);
+    }
+
+    [Theory]
+    [InlineData(ScheduleMemberRole.Viewer)]
+    [InlineData(ScheduleMemberRole.Editor)]
+    public async Task UpdateAndDelete_ByMember_AreForbidden(ScheduleMemberRole role)
+    {
+        var schedules = new ScheduleService(_schedules, _currentUser, _time);
+        await AcceptedFriendAsync(role);
+
+        var updated = await schedules.UpdateAsync(_schedule.Id, RenameRequest(), CancellationToken.None);
+        var deleted = await schedules.DeleteAsync(_schedule.Id, CancellationToken.None);
+
+        Assert.Equal(ScheduleErrorType.Forbidden, updated.Error!.Type);
+        Assert.Equal(ScheduleErrorType.Forbidden, deleted.Error!.Type);
+        Assert.Equal("Sesja zimowa", _schedule.Name);
+        Assert.Contains(_schedule, _schedules.Schedules);
+    }
+
+    [Fact]
+    public async Task UpdateAndDelete_ByStrangerOrPendingInvitee_AreNotFound()
+    {
+        var schedules = new ScheduleService(_schedules, _currentUser, _time);
+        var stranger = _users.Add("stranger@mail.com");
+        await InviteAsync(role: ScheduleMemberRole.Editor);
+
+        foreach (var userId in new[] { stranger.Id, _friend.Id })
+        {
+            _currentUser.UserId = userId;
+
+            var updated = await schedules.UpdateAsync(_schedule.Id, RenameRequest(), CancellationToken.None);
+            var deleted = await schedules.DeleteAsync(_schedule.Id, CancellationToken.None);
+
+            Assert.Equal(ScheduleErrorType.NotFound, updated.Error!.Type);
+            Assert.Equal(ScheduleErrorType.NotFound, deleted.Error!.Type);
+        }
+
+        Assert.Equal("Sesja zimowa", _schedule.Name);
+        Assert.Contains(_schedule, _schedules.Schedules);
     }
 
     [Fact]
@@ -484,7 +540,7 @@ public class ScheduleMemberServiceTests
         var result = await _service.DeclineInvitationAsync(_schedule.Id, CancellationToken.None);
 
         Assert.Equal(ScheduleErrorType.NotFound, result.Error!.Type);
-        Assert.Equal(ScheduleAccess.Viewer, await AccessOfFriendAsync());
+        Assert.Equal(AccessRole.Viewer, await AccessOfFriendAsync());
     }
 
     private sealed class TestUser : ICurrentUser
@@ -537,21 +593,23 @@ public class ScheduleMemberServiceTests
         public Task<IReadOnlyList<ScheduleWithAccess>> GetAccessibleByUserAsync(Guid userId, CancellationToken cancellationToken) =>
             Task.FromResult<IReadOnlyList<ScheduleWithAccess>>(Schedules
                 .Select(s => s.UserId == userId
-                    ? new ScheduleWithAccess(s, ScheduleAccess.Owner)
+                    ? new ScheduleWithAccess(s, AccessRole.Owner)
                     : Members.FirstOrDefault(m => m.ScheduleId == s.Id && m.UserId == userId && m.AcceptedAt != null) is { } member
                         ? new ScheduleWithAccess(s, member.Role.ToAccess())
                         : null)
                 .OfType<ScheduleWithAccess>()
                 .ToList());
 
-        public Task<Schedule?> GetByIdAsync(Guid id, Guid userId, CancellationToken cancellationToken) =>
-            throw new NotSupportedException();
-
         public Task AddAsync(Schedule schedule, CancellationToken cancellationToken) => throw new NotSupportedException();
 
-        public Task UpdateAsync(Schedule schedule, CancellationToken cancellationToken) => throw new NotSupportedException();
+        // Obiekty są w pamięci, więc zmiany już „zapisano”.
+        public Task UpdateAsync(Schedule schedule, CancellationToken cancellationToken) => Task.CompletedTask;
 
-        public Task DeleteAsync(Schedule schedule, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task DeleteAsync(Schedule schedule, CancellationToken cancellationToken)
+        {
+            Schedules.Remove(schedule);
+            return Task.CompletedTask;
+        }
 
         public Task<ScheduleWithAccess?> GetWithAccessAsync(Guid id, Guid userId, CancellationToken cancellationToken)
         {
@@ -562,7 +620,7 @@ public class ScheduleMemberServiceTests
             }
 
             var access = schedule.UserId == userId
-                ? ScheduleAccess.Owner
+                ? AccessRole.Owner
                 : Members.FirstOrDefault(m => m.ScheduleId == id && m.UserId == userId && m.AcceptedAt != null)?.Role.ToAccess();
 
             return Task.FromResult(access is { } value ? new ScheduleWithAccess(schedule, value) : null);
