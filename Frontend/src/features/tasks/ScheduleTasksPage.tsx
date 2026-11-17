@@ -9,6 +9,7 @@ import { ApiError } from '../../lib/http'
 import { downloadPdf, toPdfFileName } from '../../lib/pdf'
 import { countDays, formatDate, formatDateRange, formatDays, todayIso } from '../schedules/scheduleDates'
 import type { Schedule } from '../schedules/types'
+import { can, canLeave } from '../sharing/permissions'
 import { ACCESS_LABELS } from '../sharing/sharing'
 import { getTags } from '../tags/api'
 import { TagChip } from '../tags/TagChip'
@@ -124,8 +125,9 @@ interface ScheduleTasksPageProps {
  * W harmonogramie wspólnym z uprawnieniem „Podgląd” zadania są tylko do odczytu.
  */
 export function ScheduleTasksPage({ schedule, onBack, onShare, onLeave, onAccessChanged }: ScheduleTasksPageProps) {
-  const isOwner = schedule.access === 'owner'
-  const readOnly = schedule.access === 'viewer'
+  const canManage = can(schedule.access, 'manage')
+  const canEdit = can(schedule.access, 'editContent')
+  const readOnly = !canEdit
   const [tasks, setTasks] = useState<Task[] | null>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [actionError, setActionError] = useState<string | null>(null)
@@ -250,6 +252,16 @@ export function ScheduleTasksPage({ schedule, onBack, onShare, onLeave, onAccess
     setDialog(null)
   }
 
+  /**
+   * Serwer odmówił (403) w oknie zadania – właściciel w międzyczasie zmienił nam uprawnienia.
+   * Okno się zamyka (jego akcje i tak są już niedostępne), błąd zostaje nad listą, a uprawnienia wczytujemy od nowa.
+   */
+  const handleForbidden = (message: string) => {
+    setDialog(null)
+    setActionError(message)
+    onAccessChanged()
+  }
+
   const handleChangedElsewhere = (change: Task | { deletedId: string }) => {
     if ('deletedId' in change) removeTask(change.deletedId)
     else replaceTask(change)
@@ -324,16 +336,17 @@ export function ScheduleTasksPage({ schedule, onBack, onShare, onLeave, onAccess
           <Button variant="secondary" onClick={() => void handleExportPdf()} disabled={tasks === null || exporting}>
             {exporting ? 'Generowanie…' : 'Pobierz PDF'}
           </Button>
-          {isOwner ? (
+          {canManage && (
             <IconButton label={`Udostępnij „${schedule.name}”`} title="Udostępnij" touch onClick={onShare}>
               <UserPlusIcon />
             </IconButton>
-          ) : (
+          )}
+          {canLeave(schedule.access) && (
             <Button variant="ghost-danger" onClick={onLeave}>
               Opuść
             </Button>
           )}
-          {!readOnly && (
+          {canEdit && (
             <Button onClick={() => setDialog({ kind: 'create' })} disabled={loadError === SCHEDULE_GONE}>
               Nowe zadanie
             </Button>
@@ -343,10 +356,12 @@ export function ScheduleTasksPage({ schedule, onBack, onShare, onLeave, onAccess
       <p className="text-sm text-slate-500 tabular-nums">
         {formatDateRange(schedule.startDate, schedule.endDate)} · {formatDays(countDays(schedule.startDate, schedule.endDate))}
       </p>
-      {!isOwner && (
+      {schedule.access !== 'owner' && (
         <p className="mt-2 flex flex-wrap items-center gap-2 text-sm text-slate-600">
           <Badge tone="blue">Wspólny · {ACCESS_LABELS[schedule.access]}</Badge>
-          {readOnly ? 'Możesz tylko przeglądać zadania.' : 'Możesz dodawać i zmieniać zadania.'}
+          {canEdit
+            ? 'Możesz dodawać i zmieniać zadania. Nazwę, daty i osoby z dostępem zmienia właściciel.'
+            : 'Możesz tylko przeglądać zadania.'}
         </p>
       )}
 
@@ -445,19 +460,29 @@ export function ScheduleTasksPage({ schedule, onBack, onShare, onLeave, onAccess
         </>
       )}
 
-      {dialog?.kind === 'create' && (
-        <TaskFormDialog schedule={schedule} onClose={() => setDialog(null)} onSaved={handleSaved} onChangedElsewhere={handleChangedElsewhere} />
+      {/* Okna zmian tylko przy uprawnieniu do edycji – po odebraniu go (np. 403 gdzie indziej) znikają same. */}
+      {canEdit && dialog?.kind === 'create' && (
+        <TaskFormDialog
+          schedule={schedule}
+          onClose={() => setDialog(null)}
+          onSaved={handleSaved}
+          onChangedElsewhere={handleChangedElsewhere}
+          onForbidden={handleForbidden}
+        />
       )}
-      {dialog?.kind === 'edit' && (
+      {canEdit && dialog?.kind === 'edit' && (
         <TaskFormDialog
           schedule={schedule}
           task={dialog.task}
           onClose={() => setDialog(null)}
           onSaved={handleSaved}
           onChangedElsewhere={handleChangedElsewhere}
+          onForbidden={handleForbidden}
         />
       )}
-      {dialog?.kind === 'delete' && <DeleteTaskDialog task={dialog.task} onClose={() => setDialog(null)} onDeleted={handleDeleted} />}
+      {canEdit && dialog?.kind === 'delete' && (
+        <DeleteTaskDialog task={dialog.task} onClose={() => setDialog(null)} onDeleted={handleDeleted} onForbidden={handleForbidden} />
+      )}
     </>
   )
 }

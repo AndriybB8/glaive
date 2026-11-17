@@ -1,19 +1,28 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { ChecklistIcon, UsersIcon } from '../../components/ui/icons'
 import { getCurrentUser } from '../../lib/authToken'
 import { getTodoLists } from './api'
 import { DeleteTodoListDialog } from './DeleteTodoListDialog'
+import { InvitationsPanel } from '../sharing/InvitationsPanel'
+import { LeaveDialog } from '../sharing/LeaveDialog'
+import { ShareDialog } from '../sharing/ShareDialog'
+import { ACCESS_LABELS } from '../sharing/sharing'
+import type { Invitation } from '../sharing/types'
 import { describeChange, describeInvitation } from './describeChange'
-import { LeaveTodoListDialog } from './LeaveTodoListDialog'
 import { LiveStatusBadge } from './LiveStatusBadge'
 import { LiveToasts, type LiveToast } from './LiveToasts'
 import { useTodoListHub, type TodoListChangedMessage, type TodoListInvitationReceivedMessage } from './realtime'
-import { ShareTodoListDialog } from './ShareTodoListDialog'
-import { ACCESS_LABELS, getTodoListInvitations } from './sharingApi'
-import { TodoInvitations } from './TodoInvitations'
+import {
+  acceptTodoListInvitation,
+  declineTodoListInvitation,
+  getTodoListInvitations,
+  leaveTodoList,
+  todoListMembersApi,
+  todoListShareTexts,
+} from './sharingApi'
 import { TodoListFormDialog } from './TodoListFormDialog'
 import { TodoListView } from './TodoListView'
-import type { TodoList, TodoListInvitation, TodoListSummary } from './types'
+import type { TodoList, TodoListSummary } from './types'
 
 const LOAD_ERROR = 'Nie udało się wczytać list. Sprawdź, czy backend jest uruchomiony.'
 
@@ -45,7 +54,7 @@ export function TodoListsPage() {
   const [listError, setListError] = useState<string | null>(null)
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [dialog, setDialog] = useState<OpenDialog>(null)
-  const [invitations, setInvitations] = useState<TodoListInvitation[]>([])
+  const [invitations, setInvitations] = useState<Invitation[]>([])
   const selected = lists?.find((l) => l.id === selectedId) ?? null
 
   // --- Zmiany na żywo (SignalR) ---
@@ -206,10 +215,10 @@ export function TodoListsPage() {
   }
 
   /** Przyjęte zaproszenie: lista jest już nasza (z dostępem) – wczytujemy listy i od razu ją otwieramy. */
-  const handleInvitationAccepted = async (invitation: TodoListInvitation) => {
-    setInvitations((current) => current.filter((i) => i.listId !== invitation.listId))
+  const handleInvitationAccepted = async (invitation: Invitation) => {
+    setInvitations((current) => current.filter((i) => i.id !== invitation.id))
     await loadLists()
-    setSelectedId(invitation.listId)
+    setSelectedId(invitation.id)
   }
 
   /** Uprawnienia do listy zmieniły się w innym miejscu (403) albo lista zniknęła – wczytujemy listy od nowa. */
@@ -221,6 +230,10 @@ export function TodoListsPage() {
     setDialog(null)
     void loadLists()
   }, [loadLists])
+
+  const shareList = dialog?.kind === 'share' ? dialog.list : null
+  // Stały obiekt dla otwartego okna – okno wczytuje osoby w efekcie zależnym od niego.
+  const shareApi = useMemo(() => (shareList ? todoListMembersApi(shareList.id) : null), [shareList])
 
   const handleChangedElsewhere = (current: TodoList | { deletedId: string }) => {
     if ('deletedId' in current) removeList(current.deletedId)
@@ -246,10 +259,13 @@ export function TodoListsPage() {
           </button>
         </div>
 
-        <TodoInvitations
+        <InvitationsPanel
           invitations={invitations}
+          accept={acceptTodoListInvitation}
+          decline={declineTodoListInvitation}
           onAccepted={(invitation) => void handleInvitationAccepted(invitation)}
-          onRemoved={(listId) => setInvitations((current) => current.filter((i) => i.listId !== listId))}
+          onRemoved={(id) => setInvitations((current) => current.filter((i) => i.id !== id))}
+          className="mx-2 mb-3"
         />
 
         <nav aria-label="Listy rzeczy do zrobienia" className="min-h-0 flex-1 overflow-y-auto px-2 pb-4">
@@ -331,15 +347,17 @@ export function TodoListsPage() {
           onChangedElsewhere={handleChangedElsewhere}
         />
       )}
-      {dialog?.kind === 'share' && (
-        <ShareTodoListDialog list={dialog.list} onClose={() => setDialog(null)} onListGone={handleShareListGone} />
+      {dialog?.kind === 'share' && shareApi && (
+        <ShareDialog texts={todoListShareTexts(dialog.list.title)} api={shareApi} onClose={() => setDialog(null)} onGone={handleShareListGone} />
       )}
       {dialog?.kind === 'leave' && (
-        <LeaveTodoListDialog
-          list={dialog.list}
+        <LeaveDialog
+          title={`Opuścić listę „${dialog.list.title}”?`}
+          confirmLabel="Opuść listę"
+          leave={(userId) => leaveTodoList(dialog.list.id, userId)}
           onClose={() => setDialog(null)}
-          onLeft={(id) => {
-            removeList(id)
+          onLeft={() => {
+            removeList(dialog.list.id)
             setDialog(null)
           }}
         />

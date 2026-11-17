@@ -1,6 +1,6 @@
 import type { TableCell, TDocumentDefinitions } from 'pdfmake/interfaces'
 import { checkboxCanvas, createPdfDocument, PDF_COLORS, progressBar } from '../../lib/pdf'
-import { ACCESS_LABELS } from './sharingApi'
+import { ACCESS_LABELS } from '../sharing/sharing'
 import type { TodoItem, TodoListSummary } from './types'
 
 /** Rozmiar pola wyboru – większy niż w notatce, żeby na wydruku dało się je odhaczyć długopisem. */
