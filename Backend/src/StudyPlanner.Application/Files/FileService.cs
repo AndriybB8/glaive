@@ -39,7 +39,7 @@ public sealed class FileService(
 
     public async Task<FileResult<FileDto>> UploadAsync(string originalFileName, string contentType, Stream content, long sizeBytes, CancellationToken cancellationToken)
     {
-        var name = originalFileName.Trim();
+        var name = originalFileName?.Trim() ?? string.Empty;
         if (Validate(name, contentType, sizeBytes) is { } error)
             return FileResult<FileDto>.Failure(error);
 
@@ -70,7 +70,7 @@ public sealed class FileService(
         int expectedVersion,
         CancellationToken cancellationToken)
     {
-        var name = originalFileName.Trim();
+        var name = originalFileName?.Trim() ?? string.Empty;
         if (Validate(name, contentType, sizeBytes) is { } error)
             return FileResult<FileDto>.Failure(error);
 
