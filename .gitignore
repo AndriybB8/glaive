@@ -443,3 +443,7 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
+
+# Path from appsettings.json -> FileStorage:RootPath
+# Make sure it matches the one in appsettings
+.uploaded-files/
