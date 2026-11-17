@@ -83,11 +83,13 @@ public sealed class FileService(
 
         var (bytes, hash) = await ReadAndHashAsync(content, cancellationToken);
 
-        if (file.ContentHash == hash)
+        if (file.ContentHash == hash && file.FileName == name)
             return FileResult<FileDto>.Success(FileDto.From(file));
 
-        await storage.SaveAsync(file.StoragePath, new MemoryStream(bytes), cancellationToken);
-        file.ReplaceContent(file.StoragePath, contentType, sizeBytes, hash, UtcNow());
+        if (file.ContentHash != hash)
+            await storage.SaveAsync(file.StoragePath, new MemoryStream(bytes), cancellationToken);
+
+        file.ReplaceContent(name, file.StoragePath, contentType, sizeBytes, hash, UtcNow());
 
         try
         {

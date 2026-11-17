@@ -289,6 +289,20 @@ public class FileServiceTests
         Assert.Single(_files.Files);
     }
 
+    [Fact]
+    public async Task ReplaceContent_RenameWithIdenticalContent_UpdatesNameAndVersionWithoutTouchingDisk()
+    {
+        var created = (await UploadAsync("stara-nazwa.pdf", text: "ta sama treść")).Value!;
+        var savesAfterUpload = _storage.SaveCount;
+
+        var result = await _service.ReplaceContentAsync(created.Id, "nowa-nazwa.pdf", Pdf, Content("ta sama treść"), 13, created.Version, CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal("nowa-nazwa.pdf", result.Value!.OriginalFileName);
+        Assert.Equal(2, result.Value.Version);
+        Assert.Equal(savesAfterUpload, _storage.SaveCount);
+    }
+
     private sealed class TestUser(Guid userId) : ICurrentUser
     {
         public Guid UserId { get; set; } = userId;
