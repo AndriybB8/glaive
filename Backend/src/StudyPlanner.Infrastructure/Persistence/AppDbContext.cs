@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using StudyPlanner.Domain.Files;
 using StudyPlanner.Domain.NoteGroups;
 using StudyPlanner.Domain.Notes;
 using StudyPlanner.Domain.NoteTasks;
@@ -46,6 +47,8 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
     public DbSet<PomodoroSettings> PomodoroSettings => Set<PomodoroSettings>();
 
     public DbSet<ScheduleMember> ScheduleMembers => Set<ScheduleMember>();
+
+    public DbSet<UploadedFile> Files => Set<UploadedFile>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

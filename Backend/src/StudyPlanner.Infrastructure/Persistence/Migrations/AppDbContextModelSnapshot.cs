@@ -22,39 +22,68 @@ namespace StudyPlanner.Infrastructure.Persistence.Migrations
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
-            modelBuilder.Entity("DefaultNamespace.ScheduleMember", b =>
+            modelBuilder.Entity("StudyPlanner.Domain.Files.UploadedFile", b =>
                 {
-                    b.Property<Guid>("ScheduleId")
+                    b.Property<Guid>("Id")
                         .HasColumnType("uuid")
-                        .HasColumnName("schedule_id");
+                        .HasColumnName("id");
 
-                    b.Property<Guid>("UserId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("user_id");
+                    b.Property<string>("ContentHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("content_hash");
 
-                    b.Property<DateTime?>("AcceptedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("accepted_at");
+                    b.Property<string>("ContentType")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("content_type");
 
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
 
-                    b.Property<string>("Role")
+                    b.Property<string>("FileName")
                         .IsRequired()
-                        .HasMaxLength(20)
-                        .HasColumnType("character varying(20)")
-                        .HasColumnName("role");
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)")
+                        .HasColumnName("file_name");
 
-                    b.HasKey("ScheduleId", "UserId")
-                        .HasName("pk_schedule_members");
+                    b.Property<Guid>("OwnerId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("owner_id");
 
-                    b.HasIndex("UserId")
-                        .HasDatabaseName("ix_schedule_members_user_id");
+                    b.Property<long>("SizeBytes")
+                        .HasColumnType("bigint")
+                        .HasColumnName("size_bytes");
 
-                    b.ToTable("schedule_members", null, t =>
+                    b.Property<string>("StoragePath")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("storage_path");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<int>("Version")
+                        .IsConcurrencyToken()
+                        .HasColumnType("integer")
+                        .HasColumnName("version");
+
+                    b.HasKey("Id")
+                        .HasName("pk_files");
+
+                    b.HasIndex("OwnerId")
+                        .HasDatabaseName("ix_files_owner_id");
+
+                    b.HasIndex("OwnerId", "ContentHash")
+                        .HasDatabaseName("ix_files_owner_id_content_hash");
+
+                    b.ToTable("files", null, t =>
                         {
-                            t.HasCheckConstraint("ck_schedule_members_role", "role IN ('Viewer', 'Editor')");
+                            t.HasCheckConstraint("ck_files_content_hash_length", "length(content_hash) = 64");
                         });
                 });
 
@@ -261,6 +290,42 @@ namespace StudyPlanner.Infrastructure.Persistence.Migrations
                     b.ToTable("schedules", null, t =>
                         {
                             t.HasCheckConstraint("ck_schedules_date_range", "end_date >= start_date");
+                        });
+                });
+
+            modelBuilder.Entity("StudyPlanner.Domain.Schedules.ScheduleMember", b =>
+                {
+                    b.Property<Guid>("ScheduleId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("schedule_id");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("user_id");
+
+                    b.Property<DateTime?>("AcceptedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("accepted_at");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("Role")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("role");
+
+                    b.HasKey("ScheduleId", "UserId")
+                        .HasName("pk_schedule_members");
+
+                    b.HasIndex("UserId")
+                        .HasDatabaseName("ix_schedule_members_user_id");
+
+                    b.ToTable("schedule_members", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_schedule_members_role", "role IN ('Viewer', 'Editor')");
                         });
                 });
 
@@ -577,21 +642,14 @@ namespace StudyPlanner.Infrastructure.Persistence.Migrations
                         });
                 });
 
-            modelBuilder.Entity("DefaultNamespace.ScheduleMember", b =>
+            modelBuilder.Entity("StudyPlanner.Domain.Files.UploadedFile", b =>
                 {
-                    b.HasOne("StudyPlanner.Domain.Schedules.Schedule", null)
-                        .WithMany()
-                        .HasForeignKey("ScheduleId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired()
-                        .HasConstraintName("fk_schedule_members_schedules_schedule_id");
-
                     b.HasOne("StudyPlanner.Domain.Users.User", null)
                         .WithMany()
-                        .HasForeignKey("UserId")
+                        .HasForeignKey("OwnerId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired()
-                        .HasConstraintName("fk_schedule_members_users_user_id");
+                        .HasConstraintName("fk_files_users_owner_id");
                 });
 
             modelBuilder.Entity("StudyPlanner.Domain.NoteGroups.NoteGroup", b =>
@@ -655,6 +713,23 @@ namespace StudyPlanner.Infrastructure.Persistence.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired()
                         .HasConstraintName("fk_schedules_users_user_id");
+                });
+
+            modelBuilder.Entity("StudyPlanner.Domain.Schedules.ScheduleMember", b =>
+                {
+                    b.HasOne("StudyPlanner.Domain.Schedules.Schedule", null)
+                        .WithMany()
+                        .HasForeignKey("ScheduleId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_schedule_members_schedules_schedule_id");
+
+                    b.HasOne("StudyPlanner.Domain.Users.User", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_schedule_members_users_user_id");
                 });
 
             modelBuilder.Entity("StudyPlanner.Domain.Tags.Tag", b =>
