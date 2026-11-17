@@ -5,8 +5,12 @@ import { Button } from '../../components/ui/Button'
 import { IconButton } from '../../components/ui/IconButton'
 import { PencilIcon, TrashIcon, UserPlusIcon } from '../../components/ui/icons'
 import { ProgressBar } from '../../components/ui/ProgressBar'
+import { LiveStatusBadge } from '../../components/ui/LiveStatusBadge'
 import { ApiError } from '../../lib/http'
 import { downloadPdf, toPdfFileName } from '../../lib/pdf'
+import type { LiveStatus } from '../../lib/realtime/useHubConnection'
+import type { HistoryEntry } from '../schedules/changeHistory'
+import { ScheduleHistory } from '../schedules/ScheduleHistory'
 import { countDays, formatDate, formatDateRange, formatDays, todayIso } from '../schedules/scheduleDates'
 import type { Schedule } from '../schedules/types'
 import { can, canLeave } from '../sharing/permissions'
@@ -38,9 +42,11 @@ interface TaskRowProps {
   onDelete: () => void
   /** Harmonogram wspólny z uprawnieniem „Podgląd” – bez zmiany statusu, edycji i usuwania. */
   readOnly?: boolean
+  /** Ktoś inny właśnie dodał albo zmienił to zadanie (adres email) – na chwilę podświetlamy je z podpisem. */
+  changedBy?: string
 }
 
-function TaskRow({ task, tags, today, onStatusChange, onEdit, onDelete, readOnly = false }: TaskRowProps) {
+function TaskRow({ task, tags, today, onStatusChange, onEdit, onDelete, readOnly = false, changedBy }: TaskRowProps) {
   const done = task.status === 'done'
   const priority = priorityBadges[task.priority]
 
@@ -54,7 +60,11 @@ function TaskRow({ task, tags, today, onStatusChange, onEdit, onDelete, readOnly
   }
 
   return (
-    <li className="flex flex-wrap items-center gap-x-3 gap-y-2 py-3 pr-1 pl-4 hover:bg-slate-50 sm:flex-nowrap sm:pr-3">
+    <li
+      className={`flex flex-wrap items-center gap-x-3 gap-y-2 py-3 pr-1 pl-4 transition-colors duration-700 sm:flex-nowrap sm:pr-3 ${
+        changedBy ? 'bg-amber-50' : 'hover:bg-slate-50'
+      }`}
+    >
       <div className="flex min-w-0 basis-full flex-col items-start gap-1 sm:flex-1 sm:basis-0 sm:gap-0.5">
         <span className={`max-w-full text-sm font-medium wrap-break-word ${done ? 'text-slate-500 line-through' : 'text-slate-900'}`}>
           {task.title}
@@ -68,6 +78,15 @@ function TaskRow({ task, tags, today, onStatusChange, onEdit, onDelete, readOnly
         <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-slate-500 tabular-nums">
           {dueText}
           <Badge tone={priority.tone}>{priority.label}</Badge>
+          {changedBy && (
+            <span
+              title={`Zmienione przed chwilą przez ${changedBy}`}
+              className="max-w-48 truncate rounded-full bg-amber-100 px-2 py-0.5 text-xs text-amber-900"
+            >
+              <span className="sr-only">Zmienione przed chwilą przez </span>
+              {changedBy}
+            </span>
+          )}
         </div>
         {tags && tags.length > 0 && (
           <ul aria-label="Tagi" className="flex max-w-full flex-wrap gap-1 pt-0.5">
@@ -118,13 +137,36 @@ interface ScheduleTasksPageProps {
   onLeave: () => void
   /** Serwer odmówił (403) – uprawnienia zmieniły się w międzyczasie; lista harmonogramów powinna je wczytać od nowa. */
   onAccessChanged: () => void
+  /** Stan połączenia na żywo (wskaźnik pod nagłówkiem). */
+  liveStatus: LiveStatus
+  /** Zwiększany, gdy ktoś (albo my w innej karcie) zmienił zadania tego harmonogramu – pobieramy je wtedy od nowa. */
+  refreshSignal: number
+  /** Zadania właśnie zmienione przez inne osoby: id zadania → adres email. */
+  changedTasks: Readonly<Record<string, string>>
+  /** Historia zmian tego harmonogramu, najnowsze pierwsze. */
+  history: readonly HistoryEntry[]
+  meId: string | null
 }
+
+/** Zmiany na żywo przychodzą seriami (np. zadanie i jego tagi) – czekamy chwilę i pobieramy zadania raz. */
+const LIVE_REFRESH_DELAY_MS = 300
 
 /**
  * Zadania jednego harmonogramu z paskiem postępu. Postęp = zadania „Zrobione” / wszystkie.
  * W harmonogramie wspólnym z uprawnieniem „Podgląd” zadania są tylko do odczytu.
  */
-export function ScheduleTasksPage({ schedule, onBack, onShare, onLeave, onAccessChanged }: ScheduleTasksPageProps) {
+export function ScheduleTasksPage({
+  schedule,
+  onBack,
+  onShare,
+  onLeave,
+  onAccessChanged,
+  liveStatus,
+  refreshSignal,
+  changedTasks,
+  history,
+  meId,
+}: ScheduleTasksPageProps) {
   const canManage = can(schedule.access, 'manage')
   const canEdit = can(schedule.access, 'editContent')
   const readOnly = !canEdit
@@ -176,6 +218,11 @@ export function ScheduleTasksPage({ schedule, onBack, onShare, onLeave, onAccess
       })
   }
 
+  const runFilterRef = useRef(runFilter)
+  useEffect(() => {
+    runFilterRef.current = runFilter
+  })
+
   const toggleFilterTag = (tagId: string) => {
     const next = filterTagIds.includes(tagId) ? filterTagIds.filter((id) => id !== tagId) : [...filterTagIds, tagId]
     setFilterTagIds(next)
@@ -221,6 +268,36 @@ export function ScheduleTasksPage({ schedule, onBack, onShare, onLeave, onAccess
       ignore = true
     }
   }, [schedule.id])
+
+  // --- Zmiany na żywo: po sygnale pobieramy zadania i tagi po cichu (błąd nie zasłania listy). ---
+  const initialRefreshSignalRef = useRef(refreshSignal)
+  /** Aktualny filtr dla odświeżania z timera (bez czekania na kolejny render). */
+  const filterTagIdsRef = useRef(filterTagIds)
+  useEffect(() => {
+    filterTagIdsRef.current = filterTagIds
+  })
+
+  const refreshFromServer = useCallback(async () => {
+    try {
+      const fresh = await getTasks(schedule.id)
+      setTasks(fresh)
+      setLoadError(null)
+      setTagsByTask(await getTagsForTasks(fresh.map((t) => t.id)))
+    } catch (error) {
+      // 403/404: dostęp odebrano albo harmonogram usunięto – lista harmonogramów sprawdzi to i zamknie widok.
+      if (error instanceof ApiError && (error.status === 403 || error.status === 404)) onAccessChanged()
+    }
+  }, [schedule.id, onAccessChanged])
+
+  useEffect(() => {
+    if (refreshSignal === initialRefreshSignalRef.current) return
+    const timer = window.setTimeout(() => {
+      void refreshFromServer()
+      // Zmiana tagów albo nowe zadanie mogą zmienić wynik filtru.
+      if (filterTagIdsRef.current.length > 0) runFilterRef.current(filterTagIdsRef.current)
+    }, LIVE_REFRESH_DELAY_MS)
+    return () => window.clearTimeout(timer)
+  }, [refreshSignal, refreshFromServer])
 
   const replaceTask = (updated: Task) => setTasks((current) => current?.map((t) => (t.id === updated.id ? updated : t)) ?? current)
   const removeTask = (id: string) => setTasks((current) => current?.filter((t) => t.id !== id) ?? current)
@@ -353,9 +430,12 @@ export function ScheduleTasksPage({ schedule, onBack, onShare, onLeave, onAccess
           )}
         </div>
       </header>
-      <p className="text-sm text-slate-500 tabular-nums">
-        {formatDateRange(schedule.startDate, schedule.endDate)} · {formatDays(countDays(schedule.startDate, schedule.endDate))}
-      </p>
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+        <p className="text-sm text-slate-500 tabular-nums">
+          {formatDateRange(schedule.startDate, schedule.endDate)} · {formatDays(countDays(schedule.startDate, schedule.endDate))}
+        </p>
+        <LiveStatusBadge status={liveStatus} />
+      </div>
       {schedule.access !== 'owner' && (
         <p className="mt-2 flex flex-wrap items-center gap-2 text-sm text-slate-600">
           <Badge tone="blue">Wspólny · {ACCESS_LABELS[schedule.access]}</Badge>
@@ -450,6 +530,7 @@ export function ScheduleTasksPage({ schedule, onBack, onShare, onLeave, onAccess
                         onEdit={() => setDialog({ kind: 'edit', task })}
                         onDelete={() => setDialog({ kind: 'delete', task })}
                         readOnly={readOnly}
+                        changedBy={changedTasks[task.id]}
                       />
                     ))}
                   </ul>
@@ -459,6 +540,8 @@ export function ScheduleTasksPage({ schedule, onBack, onShare, onLeave, onAccess
           )}
         </>
       )}
+
+      {tasks !== null && <ScheduleHistory entries={history} meId={meId} />}
 
       {/* Okna zmian tylko przy uprawnieniu do edycji – po odebraniu go (np. 403 gdzie indziej) znikają same. */}
       {canEdit && dialog?.kind === 'create' && (

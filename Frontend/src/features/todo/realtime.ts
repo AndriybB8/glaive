@@ -1,6 +1,4 @@
-import { HubConnectionBuilder, LogLevel } from '@microsoft/signalr'
-import { useEffect, useRef, useState } from 'react'
-import { getToken } from '../../lib/authToken'
+import { useHubConnection, type LiveStatus } from '../../lib/realtime/useHubConnection'
 
 /** Adres huba z backendu (TodoListHub.Path). Vite przepuszcza go do backendu jako WebSocket (ws: true w proxy). */
 const HUB_URL = '/api/hubs/todo-lists'
@@ -42,9 +40,6 @@ export interface TodoListInvitationReceivedMessage {
   occurredAt: string
 }
 
-/** Stan połączenia na żywo – do wskaźnika „Na żywo”. */
-export type LiveStatus = 'connecting' | 'connected' | 'reconnecting' | 'offline'
-
 interface TodoListHubHandlers {
   onListChanged: (message: TodoListChangedMessage) => void
   onInvitationReceived: (message: TodoListInvitationReceivedMessage) => void
@@ -55,87 +50,17 @@ interface TodoListHubHandlers {
   onResync: () => void
 }
 
-/** Odstępy kolejnych prób, gdy połączenie się zerwie (automatycznie) albo nie uda się go nawiązać (ręcznie). */
-const RECONNECT_DELAYS_MS = [0, 2000, 5000, 10000, 30000]
-const RETRY_DELAYS_MS = [2000, 5000, 10000, 30000]
-
 /**
- * Połączenie z hubem list na czas, gdy komponent jest zamontowany. Zrywa się przy odmontowaniu
- * (wyjście z zakładki „Listy”), a po powrocie strona i tak wczytuje wszystko od nowa.
- * Token idzie w adresie (access_token) – przeglądarka nie pozwala dodać nagłówka do WebSocketa; backend czyta go tylko na ścieżce huba.
+ * Połączenie z hubem list na czas, gdy zakładka „Listy” jest otwarta. Po powrocie strona i tak wczytuje wszystko od nowa.
+ * Mechanika połączenia (token, wznawianie) jest wspólna z harmonogramami – useHubConnection.
  */
 export function useTodoListHub(handlers: TodoListHubHandlers): LiveStatus {
-  const [status, setStatus] = useState<LiveStatus>('connecting')
-  const handlersRef = useRef(handlers)
-
-  useEffect(() => {
-    handlersRef.current = handlers
+  return useHubConnection(HUB_URL, {
+    events: {
+      // Nazwy zdarzeń = nazwy metod ITodoListHubClient w backendzie.
+      TodoListChanged: (message: TodoListChangedMessage) => handlers.onListChanged(message),
+      TodoListInvitationReceived: (message: TodoListInvitationReceivedMessage) => handlers.onInvitationReceived(message),
+    },
+    onResync: handlers.onResync,
   })
-
-  useEffect(() => {
-    let disposed = false
-    let retryTimer: number | undefined
-    let failedStarts = 0
-
-    const connection = new HubConnectionBuilder()
-      .withUrl(HUB_URL, { accessTokenFactory: () => getToken() ?? '' })
-      .withAutomaticReconnect(RECONNECT_DELAYS_MS)
-      // Problemy z połączeniem pokazuje wskaźnik „Na żywo”; bez tego biblioteka zgłaszałaby w konsoli m.in. przerwany start przy podwójnym montażu w StrictMode.
-      .configureLogging(LogLevel.Critical)
-      .build()
-
-    // Nazwy zdarzeń = nazwy metod ITodoListHubClient w backendzie.
-    connection.on('TodoListChanged', (message: TodoListChangedMessage) => handlersRef.current.onListChanged(message))
-    connection.on('TodoListInvitationReceived', (message: TodoListInvitationReceivedMessage) =>
-      handlersRef.current.onInvitationReceived(message),
-    )
-
-    connection.onreconnecting(() => {
-      if (!disposed) setStatus('reconnecting')
-    })
-    connection.onreconnected(() => {
-      if (disposed) return
-      setStatus('connected')
-      handlersRef.current.onResync()
-    })
-    // Automatyczne wznawianie się poddało albo serwer zamknął połączenie (np. wygasł token) – próbujemy dalej sami.
-    connection.onclose(() => {
-      if (disposed) return
-      setStatus('offline')
-      scheduleStart()
-    })
-
-    function scheduleStart() {
-      const delay = RETRY_DELAYS_MS[Math.min(failedStarts, RETRY_DELAYS_MS.length - 1)]
-      failedStarts++
-      retryTimer = window.setTimeout(() => void start(), delay)
-    }
-
-    async function start() {
-      if (disposed) return
-      try {
-        await connection.start()
-        if (disposed) return
-        const recovered = failedStarts > 0
-        failedStarts = 0
-        setStatus('connected')
-        if (recovered) handlersRef.current.onResync()
-      } catch {
-        // Przerwane przez odmontowanie (np. podwójny montaż w StrictMode) albo serwer niedostępny.
-        if (disposed) return
-        setStatus('offline')
-        scheduleStart()
-      }
-    }
-
-    void start()
-
-    return () => {
-      disposed = true
-      window.clearTimeout(retryTimer)
-      void connection.stop()
-    }
-  }, [])
-
-  return status
 }
