@@ -5,6 +5,7 @@ import { IconButton } from '../../components/ui/IconButton'
 import { PencilIcon, TrashIcon, UserPlusIcon, UsersIcon } from '../../components/ui/icons'
 import { InvitationsPanel } from '../sharing/InvitationsPanel'
 import { LeaveDialog } from '../sharing/LeaveDialog'
+import { can } from '../sharing/permissions'
 import { ShareDialog } from '../sharing/ShareDialog'
 import { ACCESS_LABELS } from '../sharing/sharing'
 import type { Invitation } from '../sharing/types'
@@ -208,6 +209,7 @@ export function SchedulesPage() {
                   {sortSchedules(schedules, today).map((schedule) => {
                     const status = getStatus(schedule, today)
                     const isOwner = schedule.access === 'owner'
+                    const canManage = can(schedule.access, 'manage')
                     return (
                       <li key={schedule.id} className="relative flex items-start gap-2 py-3 pr-1 pl-4 hover:bg-slate-50 sm:items-center sm:gap-3 sm:pr-3">
                         {/* Cały wiersz otwiera zadania harmonogramu (pseudo-element przycisku rozciąga się na <li>). */}
@@ -233,7 +235,7 @@ export function SchedulesPage() {
                           <StatusBadge status={status} />
                         </span>
                         {/* Nazwę, daty i dostęp zmienia tylko właściciel; członek opuszcza harmonogram z widoku zadań. */}
-                        {isOwner && (
+                        {canManage && (
                           <div className="relative z-10 flex shrink-0 sm:gap-0.5">
                             <IconButton
                               label={`Udostępnij „${schedule.name}”`}

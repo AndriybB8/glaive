@@ -10,9 +10,11 @@ interface DeleteTaskDialogProps {
   task: Task
   onClose: () => void
   onDeleted: (id: string) => void
+  /** Serwer odmówił (403): harmonogram wspólny, a właściciel zmienił nam uprawnienia na „Podgląd”. */
+  onForbidden: (message: string) => void
 }
 
-export function DeleteTaskDialog({ task, onClose, onDeleted }: DeleteTaskDialogProps) {
+export function DeleteTaskDialog({ task, onClose, onDeleted, onForbidden }: DeleteTaskDialogProps) {
   const [deleting, setDeleting] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -28,8 +30,11 @@ export function DeleteTaskDialog({ task, onClose, onDeleted }: DeleteTaskDialogP
         onDeleted(task.id)
         return
       }
-      // 403: harmonogram wspólny, a właściciel zmienił nam uprawnienia na „Podgląd”.
-      setError(err instanceof ApiError && err.status === 403 ? err.message : 'Nie udało się usunąć zadania.')
+      if (err instanceof ApiError && err.status === 403) {
+        onForbidden(err.message)
+        return
+      }
+      setError('Nie udało się usunąć zadania.')
       setDeleting(false)
     }
   }

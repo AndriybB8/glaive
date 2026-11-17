@@ -1,6 +1,6 @@
 /**
- * Wspólne typy udostępniania (harmonogramy; listy ToDo mają na razie własne, identyczne w kształcie).
- * `owner` – wszystko, `editor` – zmiany w zawartości, `viewer` – tylko podgląd.
+ * Wspólne typy udostępniania – harmonogramy i listy ToDo (backend: AccessRole).
+ * `owner` – wszystko, `editor` – zmiany w zawartości, `viewer` – tylko podgląd. Co dokładnie wolno, ustala `can()` w permissions.ts.
  */
 export type SharedAccess = 'owner' | 'editor' | 'viewer'
 

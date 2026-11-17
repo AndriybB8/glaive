@@ -17,7 +17,8 @@ import {
   setTodoItemDone,
   updateTodoItem,
 } from './api'
-import { ACCESS_LABELS } from './sharingApi'
+import { can, canLeave } from '../sharing/permissions'
+import { ACCESS_LABELS } from '../sharing/sharing'
 import { TodoItemRow } from './TodoItemRow'
 import { createTodoListPdf } from './todoListPdf'
 import type { TodoItem, TodoListSummary } from './types'
@@ -77,8 +78,8 @@ export function TodoListView({
   changedItems = {},
 }: TodoListViewProps) {
   const listId = list.id
-  const isOwner = list.access === 'owner'
-  const readOnly = list.access === 'viewer'
+  const canManage = can(list.access, 'manage')
+  const readOnly = !can(list.access, 'editContent')
   const [items, setItems] = useState<TodoItem[] | null>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [actionError, setActionError] = useState<string | null>(null)
@@ -359,7 +360,7 @@ export function TodoListView({
           >
             <DownloadIcon />
           </IconButton>
-          {isOwner ? (
+          {canManage && (
             <>
               <IconButton label={`Udostępnij listę ${list.title}`} title="Udostępnij" touch onClick={onShare}>
                 <UserPlusIcon />
@@ -371,16 +372,19 @@ export function TodoListView({
                 <TrashIcon />
               </IconButton>
             </>
-          ) : (
+          )}
+          {canLeave(list.access) && (
             <Button variant="ghost-danger" onClick={onLeave} className="min-h-11 shrink-0 sm:min-h-8">
               Opuść listę
             </Button>
           )}
         </div>
-        {!isOwner && (
+        {list.access !== 'owner' && (
           <p className="flex flex-wrap items-center gap-2 text-sm text-slate-600">
             <Badge tone="blue">Udostępniona · {ACCESS_LABELS[list.access]}</Badge>
-            {readOnly ? 'Możesz tylko przeglądać tę listę.' : 'Możesz dodawać i zmieniać punkty.'}
+            {readOnly
+              ? 'Możesz tylko przeglądać tę listę.'
+              : 'Możesz dodawać i zmieniać punkty. Nazwę i osoby z dostępem zmienia właściciel.'}
           </p>
         )}
         <div className="flex flex-col gap-1.5">

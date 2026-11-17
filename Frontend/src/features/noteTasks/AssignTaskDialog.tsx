@@ -59,8 +59,11 @@ export function AssignTaskDialog({ noteId, linked, onLinked, onUnlinked, onClose
     getSchedules()
       .then((result) => {
         if (ignore) return
-        setSchedules(result)
-        setScheduleId(pickDefaultSchedule(result, initialLinked))
+        // Notatki są prywatne, a backend łączy je tylko z zadaniami własnych harmonogramów –
+        // wspólne (cudze) harmonogramy pomijamy, zamiast pokazywać zadania, których i tak nie da się wybrać.
+        const own = result.filter((s) => s.access === 'owner')
+        setSchedules(own)
+        setScheduleId(pickDefaultSchedule(own, initialLinked))
       })
       .catch(() => {
         if (!ignore) setLoadError('Nie udało się wczytać harmonogramów.')
@@ -89,7 +92,7 @@ export function AssignTaskDialog({ noteId, linked, onLinked, onUnlinked, onClose
         </p>
       ) : schedules.length === 0 ? (
         <p className="text-sm text-slate-600">
-          Nie masz jeszcze harmonogramów. Zadania dodasz w zakładce{' '}
+          Nie masz jeszcze własnych harmonogramów (notatki przypiszesz tylko do ich zadań). Zadania dodasz w zakładce{' '}
           <a href="#harmonogramy" className="font-medium text-blue-700 hover:underline">
             Harmonogramy
           </a>

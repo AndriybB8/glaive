@@ -55,9 +55,11 @@ interface TaskFormDialogProps {
   onSaved: (task: Task, tags: Tag[] | null, tagsFailed?: boolean) => void
   /** Serwer zgłosił, że zadanie zmieniono lub usunięto w innym miejscu – lista powinna to odzwierciedlić. */
   onChangedElsewhere: (current: Task | { deletedId: string }) => void
+  /** Serwer odmówił (403): harmonogram wspólny, a właściciel zmienił nam uprawnienia na „Podgląd”. */
+  onForbidden: (message: string) => void
 }
 
-export function TaskFormDialog({ schedule, task, onClose, onSaved, onChangedElsewhere }: TaskFormDialogProps) {
+export function TaskFormDialog({ schedule, task, onClose, onSaved, onChangedElsewhere, onForbidden }: TaskFormDialogProps) {
   const [draft, setDraft] = useState<TaskDraft>(() =>
     task ? toDraft(task) : { title: '', description: '', dueDate: null, priority: 'medium', status: 'toDo' },
   )
@@ -136,8 +138,10 @@ export function TaskFormDialog({ schedule, task, onClose, onSaved, onChangedElse
       } else if (task && error instanceof ApiError && error.status === 404) {
         setSaveError('To zadanie zostało w międzyczasie usunięte.')
         onChangedElsewhere({ deletedId: task.id })
-      } else if (error instanceof ApiError && (error.status === 400 || error.status === 403 || error.status === 404)) {
-        // 403: harmonogram wspólny, a właściciel zmienił nam uprawnienia na „Podgląd”.
+      } else if (error instanceof ApiError && error.status === 403) {
+        onForbidden(error.message)
+        return
+      } else if (error instanceof ApiError && (error.status === 400 || error.status === 404)) {
         setSaveError(error.message)
       } else {
         setSaveError('Nie udało się zapisać zadania. Spróbuj ponownie.')
@@ -236,8 +240,9 @@ export function TaskFormDialog({ schedule, task, onClose, onSaved, onChangedElse
         disabled={saving}
       />
 
-      {/* Szczegóły istniejącego zadania: podgląd przypisanych notatek. */}
-      {task && <TaskNotesSection taskId={task.id} />}
+      {/* Szczegóły istniejącego zadania: podgląd przypisanych notatek. Notatki są prywatne, a backend łączy je
+          tylko z zadaniami własnych harmonogramów (NoteTaskService) – we wspólnym, cudzym harmonogramie sekcji nie ma. */}
+      {task && schedule.access === 'owner' && <TaskNotesSection taskId={task.id} />}
 
       {conflict && (
         <Alert
