@@ -22,7 +22,7 @@ public class TaskTagService(ITaskTagRepository taskTags, ITaskRepository tasks, 
     {
         var found = await FindTaskAsync(taskId, cancellationToken);
         if (found is null) return TaskTagResult<bool>.Failure(new TaskTagError(TaskTagErrorType.NotFound, "Nie znaleziono zadania."));
-        if (!found.Value.Access.CanEditTasks()) return TaskTagResult<bool>.Failure(new (TaskTagErrorType.Forbidden, "Masz tylko podgląd tego harmonogramu."));
+        if (!found.Value.Access.Can(Permission.EditContent)) return TaskTagResult<bool>.Failure(new (TaskTagErrorType.Forbidden, "Masz tylko podgląd tego harmonogramu."));
 
         var tag = await tags.GetByIdAsync(tagId, currentUser.UserId, cancellationToken);
         if (tag is null)
@@ -38,7 +38,7 @@ public class TaskTagService(ITaskTagRepository taskTags, ITaskRepository tasks, 
     {
         var found = await FindTaskAsync(taskId, cancellationToken);
         if (found is null) return TaskTagResult<bool>.Failure(new TaskTagError(TaskTagErrorType.NotFound, "Nie znaleziono zadania."));
-        if (!found.Value.Access.CanEditTasks()) return TaskTagResult<bool>.Failure(new TaskTagError(TaskTagErrorType.Forbidden, "Masz tylko podgląd tego harmonogramu."));
+        if (!found.Value.Access.Can(Permission.EditContent)) return TaskTagResult<bool>.Failure(new TaskTagError(TaskTagErrorType.Forbidden, "Masz tylko podgląd tego harmonogramu."));
 
         var tag = await tags.GetByIdAsync(tagId, currentUser.UserId, cancellationToken);
         if (tag is null) return TaskTagResult<bool>.Failure(new TaskTagError(TaskTagErrorType.NotFound, "Nie znaleziono tagu."));
@@ -47,7 +47,7 @@ public class TaskTagService(ITaskTagRepository taskTags, ITaskRepository tasks, 
         return TaskTagResult<bool>.Success(true);
     }
 
-    private async Task<(TaskItem Task, ScheduleAccess Access)?> FindTaskAsync(Guid taskId, CancellationToken cancellationToken)
+    private async Task<(TaskItem Task, AccessRole Access)?> FindTaskAsync(Guid taskId, CancellationToken cancellationToken)
     {
         var task = await tasks.GetByIdAsync(taskId, cancellationToken);
         if (task is null) return null;

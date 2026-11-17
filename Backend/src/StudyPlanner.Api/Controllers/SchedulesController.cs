@@ -52,6 +52,7 @@ public sealed class SchedulesController(ScheduleService scheduleService) : Contr
         {
             ScheduleErrorType.NotFound => StatusCodes.Status404NotFound,
             ScheduleErrorType.Conflict => StatusCodes.Status409Conflict,
+            ScheduleErrorType.Forbidden => StatusCodes.Status403Forbidden,
             _ => StatusCodes.Status400BadRequest,
         };
 

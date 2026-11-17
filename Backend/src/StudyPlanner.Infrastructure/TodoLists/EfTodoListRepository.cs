@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using StudyPlanner.Application.Common;
 using StudyPlanner.Application.TodoLists;
 using StudyPlanner.Domain.TodoLists;
 using StudyPlanner.Infrastructure.Persistence;
@@ -97,11 +98,11 @@ public sealed class EfTodoListRepository(AppDbContext db) : ITodoListRepository
         await db.SaveChangesAsync(cancellationToken);
     }
 
-    private static TodoListAccess? ToAccess(TodoList list, Guid userId, TodoListMemberRole? role)
+    private static AccessRole? ToAccess(TodoList list, Guid userId, TodoListMemberRole? role)
     {
         if (list.UserId == userId)
         {
-            return TodoListAccess.Owner;
+            return AccessRole.Owner;
         }
 
         return role?.ToAccess();

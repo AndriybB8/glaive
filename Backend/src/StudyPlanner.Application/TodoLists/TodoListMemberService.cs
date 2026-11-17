@@ -138,7 +138,7 @@ public sealed class TodoListMemberService(
             return TodoListResult<bool>.Failure(ListNotFound);
         }
 
-        if (!list.Access.CanManageList() && userId != currentUser.UserId)
+        if (!list.Access.Can(Permission.Manage) && userId != currentUser.UserId)
         {
             return TodoListResult<bool>.Failure(Forbidden);
         }
@@ -215,7 +215,7 @@ public sealed class TodoListMemberService(
             return (null, ListNotFound);
         }
 
-        return found.Access.CanManageList() ? (found.List, null) : (null, Forbidden);
+        return found.Access.Can(Permission.Manage) ? (found.List, null) : (null, Forbidden);
     }
 
     /// <summary>Tylko do właściciela i osoby, której dotyczy zmiana – pozostali nie widzą, kto ma dostęp.</summary>

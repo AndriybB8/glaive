@@ -252,15 +252,15 @@ public class TodoListServiceTests
         var byId = await _service.GetByIdAsync(created.Id, CancellationToken.None);
         var all = await _service.GetAllAsync(CancellationToken.None);
 
-        Assert.Equal(TodoListAccess.Owner, created.Access);
-        Assert.Equal(TodoListAccess.Owner, byId.Value!.Access);
-        Assert.Equal(TodoListAccess.Owner, all.Single().Access);
+        Assert.Equal(AccessRole.Owner, created.Access);
+        Assert.Equal(AccessRole.Owner, byId.Value!.Access);
+        Assert.Equal(AccessRole.Owner, all.Single().Access);
     }
 
     [Theory]
-    [InlineData(TodoListMemberRole.Viewer, TodoListAccess.Viewer)]
-    [InlineData(TodoListMemberRole.Editor, TodoListAccess.Editor)]
-    public async Task SharedList_IsVisibleWithAccessFromRole(TodoListMemberRole role, TodoListAccess expected)
+    [InlineData(TodoListMemberRole.Viewer, AccessRole.Viewer)]
+    [InlineData(TodoListMemberRole.Editor, AccessRole.Editor)]
+    public async Task SharedList_IsVisibleWithAccessFromRole(TodoListMemberRole role, AccessRole expected)
     {
         var shared = SharedList(role);
 
@@ -362,9 +362,9 @@ public class TodoListServiceTests
                 : [list.UserId, .. Members.Where(m => m.ListId == id && m.AcceptedAt != null).Select(m => m.UserId)]);
         }
 
-        private TodoListAccess? AccessOf(TodoList list, Guid userId) =>
+        private AccessRole? AccessOf(TodoList list, Guid userId) =>
             list.UserId == userId
-                ? TodoListAccess.Owner
+                ? AccessRole.Owner
                 : Members.FirstOrDefault(m => m.ListId == list.Id && m.UserId == userId && m.AcceptedAt != null)?.Role.ToAccess();
 
         public Task AddAsync(TodoList list, CancellationToken cancellationToken)

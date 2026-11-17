@@ -1,3 +1,4 @@
+using StudyPlanner.Application.Common;
 using StudyPlanner.Domain.Schedules;
 
 namespace StudyPlanner.Application.Schedules;
@@ -14,10 +15,10 @@ public sealed record ScheduleDto(
     DateTime CreatedAt,
     DateTime UpdatedAt,
     int Version,
-    ScheduleAccess Access)
+    AccessRole Access)
 {
     /// <summary>Bez <paramref name="access"/> – właściciel (tworzenie, edycja i konflikty dotyczą tylko jego).</summary>
-    public static ScheduleDto From(Schedule schedule, ScheduleAccess access = ScheduleAccess.Owner) =>
+    public static ScheduleDto From(Schedule schedule, AccessRole access = AccessRole.Owner) =>
         new(schedule.Id, schedule.Name, schedule.StartDate, schedule.EndDate, schedule.CreatedAt, schedule.UpdatedAt, schedule.Version, access);
 }
 

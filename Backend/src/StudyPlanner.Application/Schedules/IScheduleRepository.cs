@@ -10,9 +10,6 @@ public interface IScheduleRepository
     /// </summary>
     Task<IReadOnlyList<ScheduleWithAccess>> GetAccessibleByUserAsync(Guid userId, CancellationToken cancellationToken);
 
-    /// <summary>Zwraca harmonogram tylko wtedy, gdy należy do podanego użytkownika.</summary>
-    Task<Schedule?> GetByIdAsync(Guid id, Guid userId, CancellationToken cancellationToken);
-
     Task AddAsync(Schedule schedule, CancellationToken cancellationToken);
 
     /// <summary>

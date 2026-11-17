@@ -64,7 +64,7 @@ public sealed class TodoListService(
             return TodoListResult<TodoListDto>.Failure(NotFound);
         }
 
-        if (!found.Access.CanManageList())
+        if (!found.Access.Can(Permission.Manage))
         {
             return TodoListResult<TodoListDto>.Failure(Forbidden);
         }
@@ -110,7 +110,7 @@ public sealed class TodoListService(
             return TodoListResult<bool>.Failure(NotFound);
         }
 
-        if (!found.Access.CanManageList())
+        if (!found.Access.Can(Permission.Manage))
         {
             return TodoListResult<bool>.Failure(Forbidden);
         }
@@ -126,7 +126,7 @@ public sealed class TodoListService(
 
     private DateTime UtcNow() => timeProvider.GetUtcNow().UtcDateTime;
 
-    private static TodoListDto ForOwner(TodoList list) => TodoListDto.From(list, TodoListAccess.Owner);
+    private static TodoListDto ForOwner(TodoList list) => TodoListDto.From(list, AccessRole.Owner);
 
     // Do konfliktu dochodzi tylko przy zmianie nazwy, a tę może wykonać wyłącznie właściciel.
     private static TodoListError Conflict(TodoList current) =>

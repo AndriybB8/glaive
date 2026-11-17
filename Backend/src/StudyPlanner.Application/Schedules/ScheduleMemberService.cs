@@ -108,7 +108,7 @@ public sealed class ScheduleMemberService(
         if (schedule is null)
             return ScheduleResult<bool>.Failure(ScheduleNotFound);
 
-        if (!schedule.Access.CanManageSchedule() && userId != currentUser.UserId)
+        if (!schedule.Access.Can(Permission.Manage) && userId != currentUser.UserId)
             return ScheduleResult<bool>.Failure(Forbidden);
 
         return await members.RemoveAsync(scheduleId, userId, cancellationToken)
@@ -157,7 +157,7 @@ public sealed class ScheduleMemberService(
             return ScheduleNotFound;
         }
 
-        return found.Access.CanManageSchedule() ? null : Forbidden;
+        return found.Access.Can(Permission.Manage) ? null : Forbidden;
     }
 
     private DateTime UtcNow() => timeProvider.GetUtcNow().UtcDateTime;
