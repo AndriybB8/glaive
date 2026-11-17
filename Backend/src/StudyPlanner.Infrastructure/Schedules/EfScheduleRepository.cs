@@ -76,6 +76,24 @@ public sealed class EfScheduleRepository(AppDbContext db) : IScheduleRepository
             new ScheduleWithAccess(row.Schedule, access) : null;
     }
 
+    public async Task<IReadOnlyList<Guid>> GetUserIdsWithAccessAsync(Guid id, CancellationToken cancellationToken)
+    {
+        var row = await db.Schedules
+            .AsNoTracking()
+            .Where(s => s.Id == id)
+            .Select(s => new
+            {
+                OwnerId = s.UserId,
+                MemberIds = db.ScheduleMembers
+                    .Where(m => m.ScheduleId == s.Id && m.AcceptedAt != null)
+                    .Select(m => m.UserId)
+                    .ToList(),
+            })
+            .FirstOrDefaultAsync(cancellationToken);
+
+        return row is null ? [] : [row.OwnerId, .. row.MemberIds];
+    }
+
     private static AccessRole? ToAccess(Schedule schedule, Guid userId, ScheduleMemberRole? role) =>
         schedule.UserId == userId ? AccessRole.Owner : role?.ToAccess();
 }

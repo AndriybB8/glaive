@@ -9,6 +9,7 @@ public sealed class ScheduleMemberService(
     IScheduleMemberRepository members,
     IScheduleRepository schedules,
     IUserRepository users,
+    IScheduleNotifier notifier,
     ICurrentUser currentUser,
     TimeProvider timeProvider)
 {
@@ -22,7 +23,8 @@ public sealed class ScheduleMemberService(
 
     public async Task<ScheduleResult<IReadOnlyList<ScheduleMemberDto>>> GetByScheduleAsync(Guid scheduleId, CancellationToken cancellationToken)
     {
-        if (await FindOwnedAsync(scheduleId, cancellationToken) is { } denied)
+        var (_, denied) = await FindOwnedAsync(scheduleId, cancellationToken);
+        if (denied is not null)
             return ScheduleResult<IReadOnlyList<ScheduleMemberDto>>.Failure(denied);
 
         var found = await members.GetByScheduleAsync(scheduleId, cancellationToken);
@@ -36,7 +38,8 @@ public sealed class ScheduleMemberService(
 
     public async Task<ScheduleResult<ScheduleMemberDto>> InviteAsync(Guid scheduleId, InviteScheduleMemberRequest request, CancellationToken cancellationToken)
     {
-        if (await FindOwnedAsync(scheduleId, cancellationToken) is { } denied)
+        var (schedule, denied) = await FindOwnedAsync(scheduleId, cancellationToken);
+        if (denied is not null)
             return ScheduleResult<ScheduleMemberDto>.Failure(denied);
 
         var email = request.Email?.Trim().ToLowerInvariant() ?? string.Empty;
@@ -63,15 +66,16 @@ public sealed class ScheduleMemberService(
 
         var member = ScheduleMember.Invite(scheduleId, user.Id, request.Role!.Value, UtcNow());
 
-        return await members.AddAsync(member, cancellationToken) switch
+        switch (await members.AddAsync(member, cancellationToken))
         {
-            AddScheduleMemberResult.Added =>
-                ScheduleResult<ScheduleMemberDto>.Success(ScheduleMemberDto.From(new ScheduleMemberWithEmail(member, user.Email))),
-            AddScheduleMemberResult.AlreadyExists =>
-                ScheduleResult<ScheduleMemberDto>.Failure(AlreadyMember),
-            _ =>
-                ScheduleResult<ScheduleMemberDto>.Failure(ScheduleNotFound),
-        };
+            case AddScheduleMemberResult.Added:
+                await notifier.InvitationReceivedAsync(user.Id, scheduleId, schedule!.Name);
+                return ScheduleResult<ScheduleMemberDto>.Success(ScheduleMemberDto.From(new ScheduleMemberWithEmail(member, user.Email)));
+            case AddScheduleMemberResult.AlreadyExists:
+                return ScheduleResult<ScheduleMemberDto>.Failure(AlreadyMember);
+            default:
+                return ScheduleResult<ScheduleMemberDto>.Failure(ScheduleNotFound);
+        }
     }
 
     public async Task<ScheduleResult<ScheduleMemberDto>> ChangeRoleAsync(
@@ -80,7 +84,8 @@ public sealed class ScheduleMemberService(
         ChangeScheduleMemberRoleRequest request,
         CancellationToken cancellationToken)
     {
-        if (await FindOwnedAsync(scheduleId, cancellationToken) is { } denied)
+        var (schedule, denied) = await FindOwnedAsync(scheduleId, cancellationToken);
+        if (denied is not null)
             return ScheduleResult<ScheduleMemberDto>.Failure(denied);
 
         if (ValidateRole(request.Role) is { } invalidRole)
@@ -97,6 +102,8 @@ public sealed class ScheduleMemberService(
 
             if (!await members.UpdateAsync(found.Member, cancellationToken))
                 return ScheduleResult<ScheduleMemberDto>.Failure(MemberNotFound);
+
+            await NotifyMemberChangeAsync(ScheduleChangeKind.MemberRoleChanged, schedule!, userId);
         }
 
         return ScheduleResult<ScheduleMemberDto>.Success(ScheduleMemberDto.From(found));
@@ -111,9 +118,11 @@ public sealed class ScheduleMemberService(
         if (!schedule.Access.Can(Permission.Manage) && userId != currentUser.UserId)
             return ScheduleResult<bool>.Failure(Forbidden);
 
-        return await members.RemoveAsync(scheduleId, userId, cancellationToken)
-            ? ScheduleResult<bool>.Success(true)
-            : ScheduleResult<bool>.Failure(MemberNotFound);
+        if (!await members.RemoveAsync(scheduleId, userId, cancellationToken))
+            return ScheduleResult<bool>.Failure(MemberNotFound);
+
+        await NotifyMemberChangeAsync(ScheduleChangeKind.MemberRemoved, schedule.Schedule, userId);
+        return ScheduleResult<bool>.Success(true);
     }
 
     public async Task<IReadOnlyList<ScheduleInvitationDto>> GetInvitationsAsync(CancellationToken cancellationToken)
@@ -133,9 +142,14 @@ public sealed class ScheduleMemberService(
 
         found.Member.Accept(UtcNow());
 
-        return await members.UpdateAsync(found.Member, cancellationToken)
-            ? ScheduleResult<bool>.Success(true)
-            : ScheduleResult<bool>.Failure(InvitationNotFound);
+        if (!await members.UpdateAsync(found.Member, cancellationToken))
+            return ScheduleResult<bool>.Failure(InvitationNotFound);
+
+        var schedule = await schedules.GetWithAccessAsync(scheduleId, currentUser.UserId, cancellationToken);
+        if (schedule is not null)
+            await NotifyMemberChangeAsync(ScheduleChangeKind.MemberJoined, schedule.Schedule, currentUser.UserId);
+
+        return ScheduleResult<bool>.Success(true);
     }
 
     public async Task<ScheduleResult<bool>> DeclineInvitationAsync(Guid scheduleId, CancellationToken cancellationToken)
@@ -149,16 +163,23 @@ public sealed class ScheduleMemberService(
             : ScheduleResult<bool>.Failure(InvitationNotFound);
     }
 
-    private async Task<ScheduleError?> FindOwnedAsync(Guid scheduleId, CancellationToken cancellationToken)
+    /// <summary>Harmonogram, jeśli bieżący użytkownik jest jego właścicielem; w przeciwnym razie błąd.</summary>
+    private async Task<(Schedule? Schedule, ScheduleError? Error)> FindOwnedAsync(Guid scheduleId, CancellationToken cancellationToken)
     {
         var found = await schedules.GetWithAccessAsync(scheduleId, currentUser.UserId, cancellationToken);
         if (found is null)
         {
-            return ScheduleNotFound;
+            return (null, ScheduleNotFound);
         }
 
-        return found.Access.Can(Permission.Manage) ? null : Forbidden;
+        return found.Access.Can(Permission.Manage) ? (found.Schedule, null) : (null, Forbidden);
     }
+
+    /// <summary>Tylko do właściciela i osoby, której dotyczy zmiana – pozostali nie widzą, kto ma dostęp.</summary>
+    private Task NotifyMemberChangeAsync(ScheduleChangeKind kind, Schedule schedule, Guid memberUserId) =>
+        notifier.ScheduleChangedAsync(
+            new ScheduleChange(schedule.Id, kind, ScheduleName: schedule.Name, MemberUserId: memberUserId),
+            [schedule.UserId, memberUserId]);
 
     private DateTime UtcNow() => timeProvider.GetUtcNow().UtcDateTime;
 

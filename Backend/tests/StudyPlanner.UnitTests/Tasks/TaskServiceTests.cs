@@ -3,6 +3,7 @@ using StudyPlanner.Application.Schedules;
 using StudyPlanner.Application.Tasks;
 using StudyPlanner.Domain.Schedules;
 using StudyPlanner.Domain.Tasks;
+using StudyPlanner.UnitTests.Schedules;
 
 namespace StudyPlanner.UnitTests.Tasks;
 
@@ -18,12 +19,13 @@ public class TaskServiceTests
     private readonly FakeScheduleRepository _schedules = new();
     private readonly FixedTimeProvider _time = new(new DateTimeOffset(2026, 10, 25, 12, 0, 0, TimeSpan.Zero));
     private readonly TestUser _currentUser = new(OwnerId);
+    private readonly FakeScheduleNotifier _notifier = new();
     private readonly TaskService _service;
     private readonly Schedule _schedule;
 
     public TaskServiceTests()
     {
-        _service = new TaskService(_tasks, _schedules, _currentUser, _time);
+        _service = new TaskService(_tasks, _schedules, _notifier, _currentUser, _time);
         _schedule = Schedule.Create(OwnerId, "Sesja zimowa", Jan25, Feb14, DateTime.UtcNow);
         _schedules.Schedules.Add(_schedule);
     }
@@ -357,6 +359,62 @@ public class TaskServiceTests
         Assert.Single(_tasks.Items);
     }
 
+    [Fact]
+    public async Task Changes_NotifyEveryoneWithAccessToSchedule()
+    {
+        var created = await CreateAsync("Algebra");
+        await _service.UpdateAsync(created.Id, new UpdateTaskRequest("Algebra 2", null, null, null, null, created.Version), CancellationToken.None);
+        await _service.ChangeStatusAsync(created.Id, new ChangeTaskStatusRequest(TaskItemStatus.Done), CancellationToken.None);
+        await _service.DeleteAsync(created.Id, CancellationToken.None);
+
+        Assert.Equal(
+            [ScheduleChangeKind.TaskCreated, ScheduleChangeKind.TaskUpdated, ScheduleChangeKind.TaskUpdated, ScheduleChangeKind.TaskDeleted],
+            _notifier.Changes.Select(c => c.Change.Kind));
+        Assert.All(_notifier.Changes, c =>
+        {
+            Assert.Equal(_schedule.Id, c.Change.ScheduleId);
+            Assert.Equal(created.Id, c.Change.TaskId);
+            Assert.Null(c.Recipients);
+        });
+        Assert.Equal("Algebra", _notifier.Changes[0].Change.TaskTitle);
+        Assert.Equal("Algebra 2", _notifier.Changes[3].Change.TaskTitle);
+    }
+
+    [Fact]
+    public async Task Create_ByEditor_Notifies()
+    {
+        ShareWith(FriendId, ScheduleMemberRole.Editor);
+        _currentUser.UserId = FriendId;
+
+        await _service.CreateAsync(_schedule.Id, new CreateTaskRequest("Od edytora", null, null, null, null), CancellationToken.None);
+
+        var (change, _) = Assert.Single(_notifier.Changes);
+        Assert.Equal(ScheduleChangeKind.TaskCreated, change.Kind);
+        Assert.Equal("Od edytora", change.TaskTitle);
+    }
+
+    [Fact]
+    public async Task FailedOrEmptyChanges_DoNotNotify()
+    {
+        var created = await CreateAsync(dueDate: Feb1);
+        _notifier.Changes.Clear();
+
+        // Bez zmian, nieaktualna wersja, błąd walidacji, ten sam status.
+        await _service.UpdateAsync(created.Id, new UpdateTaskRequest("Powtórka", null, Feb1, TaskPriority.Medium, TaskItemStatus.ToDo, 1), CancellationToken.None);
+        await _service.UpdateAsync(created.Id, new UpdateTaskRequest("Stara", null, null, null, null, 99), CancellationToken.None);
+        await _service.CreateAsync(_schedule.Id, new CreateTaskRequest("", null, null, null, null), CancellationToken.None);
+        await _service.ChangeStatusAsync(created.Id, new ChangeTaskStatusRequest(TaskItemStatus.ToDo), CancellationToken.None);
+
+        // Przeglądający nie może niczego zmienić, więc nikt nie dostaje powiadomień.
+        ShareWith(FriendId, ScheduleMemberRole.Viewer);
+        _currentUser.UserId = FriendId;
+        await _service.CreateAsync(_schedule.Id, new CreateTaskRequest("A", null, null, null, null), CancellationToken.None);
+        await _service.ChangeStatusAsync(created.Id, new ChangeTaskStatusRequest(TaskItemStatus.Done), CancellationToken.None);
+        await _service.DeleteAsync(created.Id, CancellationToken.None);
+
+        Assert.Empty(_notifier.Changes);
+    }
+
     private sealed class TestUser(Guid userId) : ICurrentUser
     {
         public Guid UserId { get; set; } = userId;
@@ -435,5 +493,10 @@ public class TaskServiceTests
 
             return Task.FromResult(access is { } value ? new ScheduleWithAccess(schedule, value) : null);
         }
+
+        public Task<IReadOnlyList<Guid>> GetUserIdsWithAccessAsync(Guid id, CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlyList<Guid>>(Schedules.FirstOrDefault(s => s.Id == id) is { } schedule
+                ? [schedule.UserId, .. Members.Where(m => m.ScheduleId == id).Select(m => m.UserId)]
+                : []);
     }
 }

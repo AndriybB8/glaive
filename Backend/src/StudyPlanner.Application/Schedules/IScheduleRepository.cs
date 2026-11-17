@@ -21,6 +21,9 @@ public interface IScheduleRepository
     Task DeleteAsync(Schedule schedule, CancellationToken cancellationToken);
 
     Task<ScheduleWithAccess?> GetWithAccessAsync(Guid id, Guid userId, CancellationToken cancellationToken);
+
+    /// <summary>Właściciel harmonogramu i osoby po przyjęciu zaproszenia. Pusto, gdy harmonogramu nie ma.</summary>
+    Task<IReadOnlyList<Guid>> GetUserIdsWithAccessAsync(Guid id, CancellationToken cancellationToken);
 }
 
 /// <summary>

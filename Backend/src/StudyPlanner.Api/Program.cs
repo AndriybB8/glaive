@@ -94,6 +94,7 @@ builder.Services.AddScoped<UserService>();
 builder.Services.AddScoped<IUserRepository, EfUserRepository>();
 builder.Services.AddScoped<ScheduleMemberService>();
 builder.Services.AddScoped<IScheduleMemberRepository, EfScheduleMemberRepository>();
+builder.Services.AddScoped<IScheduleNotifier, SignalRScheduleNotifier>();
 
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
@@ -109,13 +110,15 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
         };
 
         // Przeglądarka nie ustawi nagłówka Authorization dla WebSocketa, więc token przychodzi w adresie.
-        // Tylko na ścieżce huba – w pozostałych adresach trafiałby do logów i historii bez potrzeby.
+        // Tylko na ścieżkach hubów – w pozostałych adresach trafiałby do logów i historii bez potrzeby.
         options.Events = new JwtBearerEvents
         {
             OnMessageReceived = context =>
             {
                 var token = context.Request.Query["access_token"];
-                if (!string.IsNullOrEmpty(token) && context.Request.Path.StartsWithSegments(TodoListHub.Path))
+                var isHub = context.Request.Path.StartsWithSegments(TodoListHub.Path)
+                    || context.Request.Path.StartsWithSegments(ScheduleHub.Path);
+                if (!string.IsNullOrEmpty(token) && isHub)
                 {
                     context.Token = token;
                 }
@@ -179,6 +182,8 @@ app.MapControllers();
 
 // Po wygaśnięciu tokenu połączenie się zamyka – inaczej odbierałoby zmiany dalej, bez ważnego logowania.
 app.MapHub<TodoListHub>(TodoListHub.Path, options => options.CloseOnAuthenticationExpiration = true)
+    .RequireAuthorization();
+app.MapHub<ScheduleHub>(ScheduleHub.Path, options => options.CloseOnAuthenticationExpiration = true)
     .RequireAuthorization();
 
 app.Run();

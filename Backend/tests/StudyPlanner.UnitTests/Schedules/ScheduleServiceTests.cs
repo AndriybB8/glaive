@@ -17,6 +17,7 @@ public class ScheduleMemberServiceTests
     private readonly FakeMemberRepository _members;
     private readonly TestUser _currentUser = new();
     private readonly FixedTimeProvider _time = new(new DateTimeOffset(Now));
+    private readonly FakeScheduleNotifier _notifier = new();
     private readonly ScheduleMemberService _service;
 
     private readonly User _owner;
@@ -26,7 +27,7 @@ public class ScheduleMemberServiceTests
     public ScheduleMemberServiceTests()
     {
         _members = new FakeMemberRepository(_schedules, _users);
-        _service = new ScheduleMemberService(_members, _schedules, _users, _currentUser, _time);
+        _service = new ScheduleMemberService(_members, _schedules, _users, _notifier, _currentUser, _time);
 
         _owner = _users.Add("owner@mail.com");
         _friend = _users.Add("friend@mail.com");
@@ -381,7 +382,7 @@ public class ScheduleMemberServiceTests
     [Fact]
     public async Task SchedulesList_ShowsOwnScheduleAsOwner()
     {
-        var schedules = new ScheduleService(_schedules, _currentUser, _time);
+        var schedules = new ScheduleService(_schedules, _notifier, _currentUser, _time);
 
         var listed = Assert.Single(await schedules.GetAllAsync(CancellationToken.None));
 
@@ -394,7 +395,7 @@ public class ScheduleMemberServiceTests
     [InlineData(ScheduleMemberRole.Editor, AccessRole.Editor)]
     public async Task SchedulesList_ShowsSharedScheduleOnlyAfterAccepting(ScheduleMemberRole role, AccessRole expected)
     {
-        var schedules = new ScheduleService(_schedules, _currentUser, _time);
+        var schedules = new ScheduleService(_schedules, _notifier, _currentUser, _time);
         await InviteAsync(role: role);
         _currentUser.UserId = _friend.Id;
 
@@ -414,7 +415,7 @@ public class ScheduleMemberServiceTests
     [Fact]
     public async Task SchedulesList_AfterLeaving_NoLongerShowsSharedSchedule()
     {
-        var schedules = new ScheduleService(_schedules, _currentUser, _time);
+        var schedules = new ScheduleService(_schedules, _notifier, _currentUser, _time);
         await AcceptedFriendAsync();
 
         await _service.RemoveAsync(_schedule.Id, _friend.Id, CancellationToken.None);
@@ -427,7 +428,7 @@ public class ScheduleMemberServiceTests
     [Fact]
     public async Task UpdateAndDelete_ByOwner_Succeed()
     {
-        var schedules = new ScheduleService(_schedules, _currentUser, _time);
+        var schedules = new ScheduleService(_schedules, _notifier, _currentUser, _time);
 
         var updated = await schedules.UpdateAsync(_schedule.Id, RenameRequest(), CancellationToken.None);
         Assert.True(updated.IsSuccess);
@@ -444,7 +445,7 @@ public class ScheduleMemberServiceTests
     [InlineData(ScheduleMemberRole.Editor)]
     public async Task UpdateAndDelete_ByMember_AreForbidden(ScheduleMemberRole role)
     {
-        var schedules = new ScheduleService(_schedules, _currentUser, _time);
+        var schedules = new ScheduleService(_schedules, _notifier, _currentUser, _time);
         await AcceptedFriendAsync(role);
 
         var updated = await schedules.UpdateAsync(_schedule.Id, RenameRequest(), CancellationToken.None);
@@ -459,7 +460,7 @@ public class ScheduleMemberServiceTests
     [Fact]
     public async Task UpdateAndDelete_ByStrangerOrPendingInvitee_AreNotFound()
     {
-        var schedules = new ScheduleService(_schedules, _currentUser, _time);
+        var schedules = new ScheduleService(_schedules, _notifier, _currentUser, _time);
         var stranger = _users.Add("stranger@mail.com");
         await InviteAsync(role: ScheduleMemberRole.Editor);
 
@@ -476,6 +477,118 @@ public class ScheduleMemberServiceTests
 
         Assert.Equal("Sesja zimowa", _schedule.Name);
         Assert.Contains(_schedule, _schedules.Schedules);
+    }
+
+    [Fact]
+    public async Task Update_ByOwner_NotifiesEveryoneWithAccess_ButNotOnSaveWithoutChanges()
+    {
+        var schedules = new ScheduleService(_schedules, _notifier, _currentUser, _time);
+
+        await schedules.UpdateAsync(_schedule.Id, RenameRequest(), CancellationToken.None);
+        await schedules.UpdateAsync(_schedule.Id, RenameRequest(), CancellationToken.None);
+
+        var (change, recipients) = Assert.Single(_notifier.Changes);
+        Assert.Equal(ScheduleChangeKind.ScheduleUpdated, change.Kind);
+        Assert.Equal(_schedule.Id, change.ScheduleId);
+        Assert.Equal("Nowa nazwa", change.ScheduleName);
+        Assert.Null(recipients);
+    }
+
+    [Fact]
+    public async Task Delete_NotifiesPeopleWhoHadAccessBeforeDeletion()
+    {
+        var schedules = new ScheduleService(_schedules, _notifier, _currentUser, _time);
+        await AcceptedFriendAsync();
+        _currentUser.UserId = _owner.Id;
+        _notifier.Changes.Clear();
+
+        await schedules.DeleteAsync(_schedule.Id, CancellationToken.None);
+
+        var (change, recipients) = Assert.Single(_notifier.Changes);
+        Assert.Equal(ScheduleChangeKind.ScheduleDeleted, change.Kind);
+        Assert.Equal("Sesja zimowa", change.ScheduleName);
+        Assert.Equal([_owner.Id, _friend.Id], recipients!);
+    }
+
+    [Theory]
+    [InlineData(ScheduleMemberRole.Viewer)]
+    [InlineData(ScheduleMemberRole.Editor)]
+    public async Task UpdateAndDelete_ByMember_DoNotNotify(ScheduleMemberRole role)
+    {
+        var schedules = new ScheduleService(_schedules, _notifier, _currentUser, _time);
+        await AcceptedFriendAsync(role);
+        _notifier.Changes.Clear();
+
+        await schedules.UpdateAsync(_schedule.Id, RenameRequest(), CancellationToken.None);
+        await schedules.DeleteAsync(_schedule.Id, CancellationToken.None);
+
+        Assert.Empty(_notifier.Changes);
+    }
+
+    [Fact]
+    public async Task Invite_NotifiesOnlyTheInvitee_AndNotAgainWhenAlreadyInvited()
+    {
+        await InviteAsync(role: ScheduleMemberRole.Editor);
+        await InviteAsync(role: ScheduleMemberRole.Editor);
+
+        Assert.Equal((_friend.Id, _schedule.Id, "Sesja zimowa"), Assert.Single(_notifier.Invitations));
+        Assert.Empty(_notifier.Changes);
+    }
+
+    [Fact]
+    public async Task Accept_NotifiesOwnerAndNewMember()
+    {
+        await AcceptedFriendAsync();
+
+        var (change, recipients) = Assert.Single(_notifier.Changes);
+        Assert.Equal(ScheduleChangeKind.MemberJoined, change.Kind);
+        Assert.Equal(_friend.Id, change.MemberUserId);
+        Assert.Equal("Sesja zimowa", change.ScheduleName);
+        Assert.Equal([_owner.Id, _friend.Id], recipients!);
+    }
+
+    [Fact]
+    public async Task ChangeRole_NotifiesOwnerAndMember_OnlyWhenRoleChanges()
+    {
+        await AcceptedFriendAsync();
+        _currentUser.UserId = _owner.Id;
+        _notifier.Changes.Clear();
+
+        await _service.ChangeRoleAsync(_schedule.Id, _friend.Id, new ChangeScheduleMemberRoleRequest(ScheduleMemberRole.Editor), CancellationToken.None);
+        await _service.ChangeRoleAsync(_schedule.Id, _friend.Id, new ChangeScheduleMemberRoleRequest(ScheduleMemberRole.Editor), CancellationToken.None);
+
+        var (change, recipients) = Assert.Single(_notifier.Changes);
+        Assert.Equal(ScheduleChangeKind.MemberRoleChanged, change.Kind);
+        Assert.Equal(_friend.Id, change.MemberUserId);
+        Assert.Equal([_owner.Id, _friend.Id], recipients!);
+    }
+
+    [Fact]
+    public async Task Remove_ByOwnerOrLeaving_NotifiesOwnerAndMember()
+    {
+        await AcceptedFriendAsync();
+        _notifier.Changes.Clear();
+
+        // Osoba z dostępem sama rezygnuje z harmonogramu.
+        await _service.RemoveAsync(_schedule.Id, _friend.Id, CancellationToken.None);
+
+        var (change, recipients) = Assert.Single(_notifier.Changes);
+        Assert.Equal(ScheduleChangeKind.MemberRemoved, change.Kind);
+        Assert.Equal(_friend.Id, change.MemberUserId);
+        Assert.Equal([_owner.Id, _friend.Id], recipients!);
+    }
+
+    [Fact]
+    public async Task Decline_AndForbiddenMemberChanges_DoNotNotify()
+    {
+        await InviteAsync();
+        _currentUser.UserId = _friend.Id;
+        await _service.DeclineInvitationAsync(_schedule.Id, CancellationToken.None);
+
+        await _service.ChangeRoleAsync(_schedule.Id, _friend.Id, new ChangeScheduleMemberRoleRequest(ScheduleMemberRole.Editor), CancellationToken.None);
+        await _service.RemoveAsync(_schedule.Id, _owner.Id, CancellationToken.None);
+
+        Assert.Empty(_notifier.Changes);
     }
 
     [Fact]
@@ -625,6 +738,11 @@ public class ScheduleMemberServiceTests
 
             return Task.FromResult(access is { } value ? new ScheduleWithAccess(schedule, value) : null);
         }
+
+        public Task<IReadOnlyList<Guid>> GetUserIdsWithAccessAsync(Guid id, CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlyList<Guid>>(Schedules.FirstOrDefault(s => s.Id == id) is { } schedule
+                ? [schedule.UserId, .. Members.Where(m => m.ScheduleId == id && m.AcceptedAt != null).Select(m => m.UserId)]
+                : []);
     }
 
     private sealed class FakeMemberRepository(FakeScheduleRepository schedules, FakeUserRepository users) : IScheduleMemberRepository

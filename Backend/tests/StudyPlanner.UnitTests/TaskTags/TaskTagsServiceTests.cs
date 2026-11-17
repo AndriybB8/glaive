@@ -7,6 +7,7 @@ using StudyPlanner.Domain.Schedules;
 using StudyPlanner.Domain.Tags;
 using StudyPlanner.Domain.Tasks;
 using StudyPlanner.Domain.TaskTags;
+using StudyPlanner.UnitTests.Schedules;
 
 namespace StudyPlanner.UnitTests.TaskTags;
 
@@ -20,6 +21,7 @@ public class TaskTagServiceTests
     private readonly FakeScheduleRepository _scheduleRepository = new();
     private readonly FakeTaskTagRepository _taskTagRepository;
     private readonly TestUser _currentUser = new(OwnerId);
+    private readonly FakeScheduleNotifier _notifier = new();
     private readonly TaskTagService _service;
 
     private readonly Schedule _schedule;
@@ -29,7 +31,7 @@ public class TaskTagServiceTests
     public TaskTagServiceTests()
     {
         _taskTagRepository = new FakeTaskTagRepository(_tagRepository.Tags);
-        _service = new TaskTagService(_taskTagRepository, _taskRepository, _tagRepository, _scheduleRepository, _currentUser);
+        _service = new TaskTagService(_taskTagRepository, _taskRepository, _tagRepository, _scheduleRepository, _notifier, _currentUser);
 
         _schedule = Schedule.Create(OwnerId, "Sesja", new DateOnly(2027, 1, 25), new DateOnly(2027, 2, 14), DateTime.UtcNow);
         _scheduleRepository.Schedules.Add(_schedule);
@@ -192,6 +194,36 @@ public class TaskTagServiceTests
         Assert.Equal(TaskTagErrorType.NotFound, result.Error!.Type);
     }
 
+    [Fact]
+    public async Task AssignAndUnassign_NotifyOnlyWhenTagsActuallyChange()
+    {
+        await _service.AssignAsync(_task.Id, _tag.Id, CancellationToken.None);
+        await _service.AssignAsync(_task.Id, _tag.Id, CancellationToken.None);
+        await _service.UnassignAsync(_task.Id, _tag.Id, CancellationToken.None);
+        await _service.UnassignAsync(_task.Id, _tag.Id, CancellationToken.None);
+
+        Assert.Equal(2, _notifier.Changes.Count);
+        Assert.All(_notifier.Changes, c =>
+        {
+            Assert.Equal(ScheduleChangeKind.TaskTagsChanged, c.Change.Kind);
+            Assert.Equal(_schedule.Id, c.Change.ScheduleId);
+            Assert.Equal(_task.Id, c.Change.TaskId);
+            Assert.Equal("Zadanie", c.Change.TaskTitle);
+            Assert.Null(c.Recipients);
+        });
+    }
+
+    [Fact]
+    public async Task Assign_ByViewer_DoesNotNotify()
+    {
+        ShareWith(FriendId, ScheduleMemberRole.Viewer);
+        _currentUser.UserId = FriendId;
+
+        await _service.AssignAsync(_task.Id, _tag.Id, CancellationToken.None);
+
+        Assert.Empty(_notifier.Changes);
+    }
+
     private sealed class TestUser(Guid userId) : ICurrentUser
     {
         public Guid UserId { get; set; } = userId;
@@ -286,6 +318,11 @@ public class TaskTagServiceTests
 
             return Task.FromResult(access is { } value ? new ScheduleWithAccess(schedule, value) : null);
         }
+
+        public Task<IReadOnlyList<Guid>> GetUserIdsWithAccessAsync(Guid id, CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlyList<Guid>>(Schedules.FirstOrDefault(s => s.Id == id) is { } schedule
+                ? [schedule.UserId, .. Members.Where(m => m.ScheduleId == id).Select(m => m.UserId)]
+                : []);
     }
 
     private sealed class FakeTaskTagRepository(List<Tag> tags) : ITaskTagRepository
