@@ -1,4 +1,4 @@
-import type { LiveStatus } from './realtime'
+import type { LiveStatus } from '../../lib/realtime/useHubConnection'
 
 const LABELS: Record<LiveStatus, { text: string; dot: string; title: string }> = {
   connected: { text: 'Na żywo', dot: 'bg-emerald-500', title: 'Zmiany innych osób pojawiają się od razu.' },
@@ -11,7 +11,7 @@ const LABELS: Record<LiveStatus, { text: string; dot: string; title: string }> =
   },
 }
 
-/** Mały wskaźnik stanu połączenia na żywo pod nagłówkiem „Listy”. */
+/** Mały wskaźnik stanu połączenia na żywo pod nagłówkiem („Listy”, „Harmonogramy”). */
 export function LiveStatusBadge({ status }: { status: LiveStatus }) {
   const label = LABELS[status]
   return (

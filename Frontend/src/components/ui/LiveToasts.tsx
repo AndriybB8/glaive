@@ -1,5 +1,5 @@
-import { IconButton } from '../../components/ui/IconButton'
-import { CloseIcon } from '../../components/ui/icons'
+import { IconButton } from './IconButton'
+import { CloseIcon } from './icons'
 
 export interface LiveToast {
   id: number

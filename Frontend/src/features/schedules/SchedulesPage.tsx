@@ -1,8 +1,11 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Badge } from '../../components/ui/Badge'
 import { Button } from '../../components/ui/Button'
 import { IconButton } from '../../components/ui/IconButton'
 import { PencilIcon, TrashIcon, UserPlusIcon, UsersIcon } from '../../components/ui/icons'
+import { LiveStatusBadge } from '../../components/ui/LiveStatusBadge'
+import { LiveToasts, type LiveToast } from '../../components/ui/LiveToasts'
+import { getCurrentUser } from '../../lib/authToken'
 import { InvitationsPanel } from '../sharing/InvitationsPanel'
 import { LeaveDialog } from '../sharing/LeaveDialog'
 import { can } from '../sharing/permissions'
@@ -11,6 +14,9 @@ import { ACCESS_LABELS } from '../sharing/sharing'
 import type { Invitation } from '../sharing/types'
 import { ScheduleTasksPage } from '../tasks/ScheduleTasksPage'
 import { getSchedules } from './api'
+import { addToHistory, sameSeries, type HistoryEntry } from './changeHistory'
+import { describeScheduleChange } from './describeScheduleChange'
+import { useScheduleHub, type ScheduleChangedMessage, type ScheduleInvitationReceivedMessage } from './realtime'
 import { DeleteScheduleDialog } from './DeleteScheduleDialog'
 import { ScheduleFormDialog } from './ScheduleFormDialog'
 import { countDays, formatDateRange, formatDays, getStatus, sortSchedules, todayIso } from './scheduleDates'
@@ -25,6 +31,15 @@ import {
 import type { Schedule, ScheduleStatus } from './types'
 
 const LOAD_ERROR = 'Nie udało się wczytać harmonogramów. Sprawdź, czy backend jest uruchomiony.'
+
+/** Zmiany na żywo: jak długo widać powiadomienie i podświetlone zadanie, ile powiadomień naraz. */
+const TOAST_MS = 6000
+const HIGHLIGHT_MS = 5000
+const MAX_TOASTS = 3
+/** Zmiany przychodzą seriami – listę harmonogramów pobieramy raz po chwili ciszy. */
+const SCHEDULES_REFRESH_DELAY_MS = 300
+
+const TASK_CHANGES: ReadonlySet<string> = new Set(['taskCreated', 'taskUpdated', 'taskDeleted', 'taskTagsChanged'])
 
 const statusBadges = {
   ongoing: { tone: 'blue', label: 'Trwa' },
@@ -115,6 +130,99 @@ export function SchedulesPage() {
     }
   }, [loadInvitations])
 
+  // --- Zmiany na żywo (SignalR, SCRUM-109) ---
+  const [me] = useState(getCurrentUser)
+  const meId = me?.id ?? null
+  const [toasts, setToasts] = useState<LiveToast[]>([])
+  /** Sygnał dla otwartego harmonogramu: pobierz zadania od nowa. */
+  const [tasksRefreshSignal, setTasksRefreshSignal] = useState(0)
+  /** Zadania właśnie zmienione przez inne osoby: id → { email, numer zmiany } (numer, żeby stary timer nie zgasił nowszej zmiany). */
+  const [changedTasks, setChangedTasks] = useState<Record<string, { email: string; seq: number }>>({})
+  /** Historia zmian wg harmonogramu – na czas otwarcia zakładki (backend jej nie przechowuje). */
+  const [histories, setHistories] = useState<Record<string, HistoryEntry[]>>({})
+  const liveSeqRef = useRef(0)
+  const schedulesRefreshTimerRef = useRef<number | undefined>(undefined)
+  /** Ostatnia wiadomość z powiadomieniem – kolejne z tej samej serii (np. kilka tagów naraz) nie dokładają nowych. */
+  const lastToastRef = useRef<ScheduleChangedMessage | null>(null)
+
+  /** Lista harmonogramów po zmianie na żywo: po cichu (błąd zostawia poprzedni stan) i raz na serię zmian. */
+  const refreshSchedulesQuietly = useCallback(() => {
+    window.clearTimeout(schedulesRefreshTimerRef.current)
+    schedulesRefreshTimerRef.current = window.setTimeout(() => {
+      getSchedules()
+        .then(setSchedules)
+        .catch(() => undefined)
+    }, SCHEDULES_REFRESH_DELAY_MS)
+  }, [])
+
+  useEffect(() => () => window.clearTimeout(schedulesRefreshTimerRef.current), [])
+
+  const dismissToast = useCallback((id: number) => setToasts((current) => current.filter((t) => t.id !== id)), [])
+
+  const pushToast = (actor: string, text: string) => {
+    const id = ++liveSeqRef.current
+    setToasts((current) => [...current, { id, actor: actor || 'Ktoś', text }].slice(-MAX_TOASTS))
+    window.setTimeout(() => dismissToast(id), TOAST_MS)
+  }
+
+  const highlightTask = (taskId: string, email: string) => {
+    const seq = ++liveSeqRef.current
+    setChangedTasks((current) => ({ ...current, [taskId]: { email, seq } }))
+    window.setTimeout(() => {
+      setChangedTasks((current) => {
+        if (current[taskId]?.seq !== seq) return current
+        const next = { ...current }
+        delete next[taskId]
+        return next
+      })
+    }, HIGHLIGHT_MS)
+  }
+
+  const handleScheduleChanged = (message: ScheduleChangedMessage) => {
+    const isOpen = message.scheduleId === openedId
+    const fromSomeoneElse = message.actorUserId !== meId
+    const isTaskChange = TASK_CHANGES.has(message.change)
+
+    // Historia: także własne zmiany. Seria tych samych zmian (np. kilka tagów) to jeden wpis.
+    const historyId = `h${++liveSeqRef.current}`
+    setHistories((current) => ({ ...current, [message.scheduleId]: addToHistory(current[message.scheduleId] ?? [], message, historyId) }))
+
+    // Stan zawsze z API – także przy własnych zmianach, bo mogły przyjść z innej karty.
+    if (isTaskChange) {
+      if (isOpen) setTasksRefreshSignal((n) => n + 1)
+    } else {
+      // Nazwa, daty, dostęp albo usunięcie – lista harmonogramów (i uprawnienia otwartego) od nowa.
+      // Gdy otwarty harmonogram zniknie z listy, widok sam wraca do listy harmonogramów.
+      refreshSchedulesQuietly()
+    }
+
+    if (!fromSomeoneElse) return
+
+    if (isOpen && message.taskId && message.change !== 'taskDeleted') highlightTask(message.taskId, message.actorEmail || 'Ktoś')
+
+    const last = lastToastRef.current
+    lastToastRef.current = message
+    if (last && sameSeries(last, message)) return
+    const scheduleName = isOpen ? null : (schedules?.find((s) => s.id === message.scheduleId)?.name ?? null)
+    pushToast(message.actorEmail, describeScheduleChange(message, meId, isTaskChange ? scheduleName : null))
+  }
+
+  const handleInvitationReceived = (message: ScheduleInvitationReceivedMessage) => {
+    void loadInvitations()
+    if (message.actorUserId !== meId) pushToast(message.actorEmail, `zaprasza Cię do harmonogramu „${message.scheduleName}”`)
+  }
+
+  const liveStatus = useScheduleHub({
+    onScheduleChanged: handleScheduleChanged,
+    onInvitationReceived: handleInvitationReceived,
+    // Po przerwie w połączeniu wiadomości przepadły – pobieramy wszystko od nowa.
+    onResync: () => {
+      refreshSchedulesQuietly()
+      void loadInvitations()
+      setTasksRefreshSignal((n) => n + 1)
+    },
+  })
+
   const closeDialog = () => setDialog(null)
 
   /** `share` – w nowym harmonogramie zaznaczono „Harmonogram wspólny”: od razu otwieramy zapraszanie. */
@@ -172,12 +280,20 @@ export function SchedulesPage() {
             onShare={() => setDialog({ kind: 'share', schedule: opened })}
             onLeave={() => setDialog({ kind: 'leave', schedule: opened })}
             onAccessChanged={handleAccessChanged}
+            liveStatus={liveStatus}
+            refreshSignal={tasksRefreshSignal}
+            changedTasks={Object.fromEntries(Object.entries(changedTasks).map(([id, change]) => [id, change.email]))}
+            history={histories[opened.id] ?? []}
+            meId={meId}
           />
         ) : (
           <>
             {/* Nagłówek jak w zakładce Notatki (NotesPage): tytuł text-lg font-semibold i ten sam przycisk. */}
             <header className="flex items-center justify-between gap-2 pt-5 pb-3">
-              <h1 className="text-lg font-semibold">Harmonogramy</h1>
+              <div className="flex min-w-0 flex-col gap-0.5">
+                <h1 className="text-lg font-semibold">Harmonogramy</h1>
+                <LiveStatusBadge status={liveStatus} />
+              </div>
               <Button onClick={openCreate}>Nowy harmonogram</Button>
             </header>
 
@@ -268,6 +384,8 @@ export function SchedulesPage() {
           </>
         )}
       </main>
+
+      <LiveToasts toasts={toasts} onDismiss={dismissToast} />
 
       {dialog?.kind === 'create' && (
         <ScheduleFormDialog onClose={closeDialog} onSaved={handleSaved} onChangedElsewhere={handleChangedElsewhere} />
