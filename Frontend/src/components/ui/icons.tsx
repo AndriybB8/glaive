@@ -146,3 +146,13 @@ export function DownloadIcon() {
     </Icon>
   )
 }
+
+export function UploadIcon() {
+  return (
+    <Icon>
+      <path d="M10 13V4" />
+      <path d="M6.5 7.5 10 4l3.5 3.5" />
+      <path d="M4 13.5v2.5h12v-2.5" />
+    </Icon>
+  )
+}

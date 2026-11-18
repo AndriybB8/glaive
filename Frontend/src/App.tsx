@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { NavTabs } from './components/ui/NavTabs'
+import { FilesPage } from './features/files/FilesPage'
 import { NotesPage } from './features/notes/NotesPage'
 import { SchedulesPage } from './features/schedules/SchedulesPage'
 import { TagsPage } from './features/tags/TagsPage'
@@ -21,6 +22,7 @@ const pages = [
   { id: 'listy', label: 'Listy' },
   { id: 'pomodoro', label: 'Pomodoro' },
   { id: 'tagi', label: 'Tagi' },
+  { id: 'pliki', label: 'Pliki' },
 ] as const
 
 type PageId = (typeof pages)[number]['id']
@@ -81,6 +83,8 @@ function App() {
             <TagsPage />
           ) : page === 'listy' ? (
             <TodoListsPage />
+          ) : page === 'pliki' ? (
+            <FilesPage />
           ) : (
             <NotesPage />
           )}
