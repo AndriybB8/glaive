@@ -56,11 +56,12 @@ public class UploadedFile
         };
     }
 
-    public void ReplaceContent(string storagePath, string contentType, long sizeBytes, string contentHash, DateTime utcNow)
+    public void ReplaceContent(string fileName, string storagePath, string contentType, long sizeBytes, string contentHash, DateTime utcNow)
     {
         EnsureUtc(utcNow);
         EnsureValid(FileName, storagePath, contentType, sizeBytes, contentHash);
 
+        FileName = fileName;
         StoragePath = storagePath;
         ContentType = contentType;
         SizeBytes = sizeBytes;
