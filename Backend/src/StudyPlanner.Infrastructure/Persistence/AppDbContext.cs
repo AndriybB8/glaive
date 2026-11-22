@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using StudyPlanner.Domain.Calendar;
 using StudyPlanner.Domain.Files;
 using StudyPlanner.Domain.NoteGroups;
 using StudyPlanner.Domain.Notes;
@@ -49,6 +50,9 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
     public DbSet<ScheduleMember> ScheduleMembers => Set<ScheduleMember>();
 
     public DbSet<UploadedFile> Files => Set<UploadedFile>();
+
+    /// <summary>Własne wydarzenia kalendarza: jednorazowe, serie i wyjątki serii (tabela calendar_events).</summary>
+    public DbSet<CalendarEvent> CalendarEvents => Set<CalendarEvent>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

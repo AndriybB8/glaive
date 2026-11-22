@@ -22,6 +22,122 @@ namespace StudyPlanner.Infrastructure.Persistence.Migrations
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
+            modelBuilder.Entity("StudyPlanner.Domain.Calendar.CalendarEvent", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("Color")
+                        .IsRequired()
+                        .HasMaxLength(7)
+                        .HasColumnType("character varying(7)")
+                        .HasColumnName("color");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("Description")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)")
+                        .HasColumnName("description");
+
+                    b.Property<DateOnly?>("EndDate")
+                        .HasColumnType("date")
+                        .HasColumnName("end_date");
+
+                    b.Property<DateTime?>("EndsAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("ends_at");
+
+                    b.Property<bool>("IsAllDay")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_all_day");
+
+                    b.Property<bool>("IsCancelled")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_cancelled");
+
+                    b.Property<DateOnly?>("OriginalDate")
+                        .HasColumnType("date")
+                        .HasColumnName("original_date");
+
+                    b.Property<string>("Recurrence")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("recurrence_frequency");
+
+                    b.Property<DateOnly?>("RecurrenceUntil")
+                        .HasColumnType("date")
+                        .HasColumnName("recurrence_until");
+
+                    b.Property<Guid?>("SeriesId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("series_id");
+
+                    b.Property<DateOnly?>("StartDate")
+                        .HasColumnType("date")
+                        .HasColumnName("start_date");
+
+                    b.Property<DateTime?>("StartsAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("starts_at");
+
+                    b.Property<string>("TimeZone")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("time_zone");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("title");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("user_id");
+
+                    b.Property<int>("Version")
+                        .IsConcurrencyToken()
+                        .HasColumnType("integer")
+                        .HasColumnName("version");
+
+                    b.HasKey("Id")
+                        .HasName("pk_calendar_events");
+
+                    b.HasIndex("UserId")
+                        .HasDatabaseName("ix_calendar_events_user_id");
+
+                    b.HasIndex("SeriesId", "OriginalDate")
+                        .IsUnique()
+                        .HasDatabaseName("ux_calendar_events_series_id_original_date");
+
+                    b.ToTable("calendar_events", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_calendar_events_color", "color ~ '^#[0-9A-Fa-f]{6}$'");
+
+                            t.HasCheckConstraint("ck_calendar_events_date_range", "end_date >= start_date");
+
+                            t.HasCheckConstraint("ck_calendar_events_exception_shape", "(series_id IS NULL AND original_date IS NULL AND NOT is_cancelled) OR (series_id IS NOT NULL AND original_date IS NOT NULL AND recurrence_frequency = 'None')");
+
+                            t.HasCheckConstraint("ck_calendar_events_recurrence_frequency", "recurrence_frequency IN ('None', 'Daily', 'Weekly', 'Monthly')");
+
+                            t.HasCheckConstraint("ck_calendar_events_recurrence_until", "recurrence_until IS NULL OR recurrence_frequency <> 'None'");
+
+                            t.HasCheckConstraint("ck_calendar_events_time_range", "ends_at > starts_at");
+
+                            t.HasCheckConstraint("ck_calendar_events_time_shape", "(is_all_day AND start_date IS NOT NULL AND end_date IS NOT NULL AND starts_at IS NULL AND ends_at IS NULL) OR (NOT is_all_day AND starts_at IS NOT NULL AND ends_at IS NOT NULL AND start_date IS NULL AND end_date IS NULL)");
+                        });
+                });
+
             modelBuilder.Entity("StudyPlanner.Domain.Files.UploadedFile", b =>
                 {
                     b.Property<Guid>("Id")
@@ -640,6 +756,22 @@ namespace StudyPlanner.Infrastructure.Persistence.Migrations
                         {
                             t.HasCheckConstraint("ck_users_status", "status IN ('Active', 'Inactive')");
                         });
+                });
+
+            modelBuilder.Entity("StudyPlanner.Domain.Calendar.CalendarEvent", b =>
+                {
+                    b.HasOne("StudyPlanner.Domain.Calendar.CalendarEvent", null)
+                        .WithMany()
+                        .HasForeignKey("SeriesId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .HasConstraintName("fk_calendar_events_calendar_events_series_id");
+
+                    b.HasOne("StudyPlanner.Domain.Users.User", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_calendar_events_users_user_id");
                 });
 
             modelBuilder.Entity("StudyPlanner.Domain.Files.UploadedFile", b =>
