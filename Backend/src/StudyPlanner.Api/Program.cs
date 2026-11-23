@@ -8,6 +8,7 @@ using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using StudyPlanner.Api.Hubs;
+using StudyPlanner.Application.Calendar;
 using StudyPlanner.Application.Common;
 using StudyPlanner.Application.Files;
 using StudyPlanner.Application.NoteGroups;
@@ -20,6 +21,7 @@ using StudyPlanner.Application.Tasks;
 using StudyPlanner.Application.TaskTags;
 using StudyPlanner.Application.TodoLists;
 using StudyPlanner.Application.Users;
+using StudyPlanner.Infrastructure.Calendar;
 using StudyPlanner.Infrastructure.Files;
 using StudyPlanner.Infrastructure.NoteGroups;
 using StudyPlanner.Infrastructure.Notes;
@@ -100,6 +102,10 @@ builder.Services.AddScoped<IScheduleNotifier, SignalRScheduleNotifier>();
 builder.Services.AddScoped<FileService>();
 builder.Services.AddScoped<IUploadedFileRepository, EfUploadedFileRepository>();
 builder.Services.AddScoped<IFileStorage, LocalDiskFileStorage>();
+builder.Services.AddScoped<CalendarService>();
+builder.Services.AddScoped<CalendarEventService>();
+builder.Services.AddScoped<ICalendarEventRepository, EfCalendarEventRepository>();
+builder.Services.AddScoped<ICalendarScheduleRepository, EfCalendarScheduleRepository>();
 
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
