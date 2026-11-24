@@ -5,6 +5,7 @@ public enum TagErrorType
     NotFound,
     Validation,
     Conflict,
+    Forbidden
 }
 
 public sealed record TagError(TagErrorType Type, string Message, TagDto? Current = null);

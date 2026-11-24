@@ -8,17 +8,17 @@ namespace StudyPlanner.Infrastructure.Tags;
 
 public class EfTagRepository(AppDbContext db) : ITagRepository
 {
-    public async Task<IReadOnlyList<Tag>> GetByUserAsync(Guid userId, CancellationToken cancellationToken)
+    public async Task<IReadOnlyList<Tag>> GetByScheduleAsync(Guid scheduleId, CancellationToken cancellationToken)
     {
         return await db.Tags
             .AsNoTracking()
-            .Where(t => t.ScheduleId == userId)
+            .Where(t => t.ScheduleId == scheduleId)
             .ToListAsync(cancellationToken);
     }
 
-    public Task<Tag?> GetByIdAsync(Guid id, Guid userId, CancellationToken cancellationToken)
+    public Task<Tag?> GetByIdAsync(Guid id, Guid scheduleId, CancellationToken cancellationToken)
     {
-        return db.Tags.FirstOrDefaultAsync(t => t.Id == id && t.ScheduleId == userId, cancellationToken);
+        return db.Tags.FirstOrDefaultAsync(t => t.Id == id && t.ScheduleId == scheduleId, cancellationToken);
     }
 
     public async Task AddAsync(Tag tag, CancellationToken cancellationToken)
