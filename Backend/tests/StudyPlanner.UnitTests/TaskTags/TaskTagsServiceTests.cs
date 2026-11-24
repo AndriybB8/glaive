@@ -254,6 +254,9 @@ public class TaskTagServiceTests
             Tasks.Remove(task);
             return Task.CompletedTask;
         }
+
+        public Task<IReadOnlyList<TaskItem>> GetUpcomingAsync(Guid userId, DateOnly fromDate, DateOnly toDate, int limit, CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
     }
 
     private sealed class FakeTagRepository : ITagRepository

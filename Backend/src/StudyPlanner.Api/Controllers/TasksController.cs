@@ -55,6 +55,15 @@ public sealed class TasksController(TaskService taskService) : ControllerBase
         return result.IsSuccess ? NoContent() : ToErrorResponse(result.Error!);
     }
 
+    [HttpGet("api/tasks/upcoming")]
+    public async Task<ActionResult<IReadOnlyList<TaskDto>>> GetUpcoming([FromQuery] int days = 7, [FromQuery] int limit = 10, CancellationToken cancellationToken = default)
+    {
+        var effectiveDays = Math.Clamp(days, 1, 90);
+        var effectiveLimit = Math.Clamp(limit, 1, 50);
+
+        return Ok(await taskService.GetUpcomingAsync(effectiveDays, effectiveLimit, cancellationToken));
+    }
+
     private ObjectResult ToErrorResponse(TaskError error)
     {
         var status = error.Type switch
