@@ -47,4 +47,20 @@ public sealed class EfTaskRepository(AppDbContext db) : ITaskRepository
         db.Tasks.Remove(task);
         await db.SaveChangesAsync(cancellationToken);
     }
+
+    public async Task<IReadOnlyList<TaskItem>> GetUpcomingAsync(Guid userId, DateOnly fromDate, DateOnly toDate,
+        int limit, CancellationToken cancellationToken)
+    {
+        return await db.Tasks
+            .AsNoTracking()
+            .Where(t => t.DueDate != null && t.DueDate >= fromDate && t.DueDate <= toDate &&
+                        t.Status != TaskItemStatus.Done)
+            .Where(t => db.Schedules.Any(s => s.Id == t.ScheduleId && s.UserId == userId)
+                        || db.ScheduleMembers.Any(m =>
+                            m.ScheduleId == t.ScheduleId && m.UserId == userId && m.AcceptedAt != null))
+            .OrderBy(t => t.DueDate)
+            .ThenByDescending(t => t.Priority)
+            .Take(limit)
+            .ToListAsync(cancellationToken);
+    }
 }

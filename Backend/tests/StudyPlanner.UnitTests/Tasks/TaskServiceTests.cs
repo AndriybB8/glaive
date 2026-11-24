@@ -15,8 +15,8 @@ public class TaskServiceTests
     private static readonly DateOnly Feb1 = new(2027, 2, 1);
     private static readonly DateOnly Feb14 = new(2027, 2, 14);
 
-    private readonly FakeTaskRepository _tasks = new();
     private readonly FakeScheduleRepository _schedules = new();
+    private readonly FakeTaskRepository _tasks;
     private readonly FixedTimeProvider _time = new(new DateTimeOffset(2026, 10, 25, 12, 0, 0, TimeSpan.Zero));
     private readonly TestUser _currentUser = new(OwnerId);
     private readonly FakeScheduleNotifier _notifier = new();
@@ -25,6 +25,7 @@ public class TaskServiceTests
 
     public TaskServiceTests()
     {
+        _tasks = new FakeTaskRepository(_schedules);
         _service = new TaskService(_tasks, _schedules, _notifier, _currentUser, _time);
         _schedule = Schedule.Create(OwnerId, "Sesja zimowa", Jan25, Feb14, DateTime.UtcNow);
         _schedules.Schedules.Add(_schedule);
@@ -415,6 +416,106 @@ public class TaskServiceTests
         Assert.Empty(_notifier.Changes);
     }
 
+    private void MoveTimeToScheduleStart() =>
+    _time.Advance(Jan25.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc) - _time.GetUtcNow().UtcDateTime);
+
+    [Fact]
+    public async Task GetUpcoming_ReturnsSortedByDueDateThenPriority()
+    {
+        MoveTimeToScheduleStart();
+        await _service.CreateAsync(_schedule.Id, new CreateTaskRequest("Pojutrze, niski", null, Jan25.AddDays(2), TaskPriority.Low, null), CancellationToken.None);
+        await _service.CreateAsync(_schedule.Id, new CreateTaskRequest("Pojutrze, wysoki", null, Jan25.AddDays(2), TaskPriority.High, null), CancellationToken.None);
+        await _service.CreateAsync(_schedule.Id, new CreateTaskRequest("Jutro", null, Jan25.AddDays(1), null, null), CancellationToken.None);
+
+        var result = await _service.GetUpcomingAsync(7, 10, CancellationToken.None);
+
+        Assert.Equal(["Jutro", "Pojutrze, wysoki", "Pojutrze, niski"], result.Select(t => t.Title));
+    }
+
+    [Fact]
+    public async Task GetUpcoming_ExcludesDoneTasks()
+    {
+        MoveTimeToScheduleStart();
+        var created = await CreateAsync(dueDate: Jan25.AddDays(1));
+        await _service.ChangeStatusAsync(created.Id, new ChangeTaskStatusRequest(TaskItemStatus.Done), CancellationToken.None);
+
+        var result = await _service.GetUpcomingAsync(7, 10, CancellationToken.None);
+
+        Assert.Empty(result);
+    }
+
+    [Fact]
+    public async Task GetUpcoming_ExcludesTasksWithoutDueDate()
+    {
+        MoveTimeToScheduleStart();
+        await CreateAsync(dueDate: null);
+
+        var result = await _service.GetUpcomingAsync(7, 10, CancellationToken.None);
+
+        Assert.Empty(result);
+    }
+
+    [Fact]
+    public async Task GetUpcoming_ExcludesTasksOutsideDateRange()
+    {
+        MoveTimeToScheduleStart();
+        _time.Advance(TimeSpan.FromDays(5));
+        await _service.CreateAsync(_schedule.Id, new CreateTaskRequest("Za wcześnie", null, Jan25, null, null), CancellationToken.None);
+        await _service.CreateAsync(_schedule.Id, new CreateTaskRequest("W zakresie", null, Jan25.AddDays(8), null, null), CancellationToken.None);
+        await _service.CreateAsync(_schedule.Id, new CreateTaskRequest("Za późno", null, Jan25.AddDays(20), null, null), CancellationToken.None);
+
+        var result = await _service.GetUpcomingAsync(7, 10, CancellationToken.None);
+
+        Assert.Equal("W zakresie", Assert.Single(result).Title);
+    }
+
+    [Fact]
+    public async Task GetUpcoming_IncludesTasksFromSharedSchedule()
+    {
+        var otherOwner = Guid.NewGuid();
+        var sharedSchedule = Schedule.Create(otherOwner, "Udostępniony", Jan25, Feb14, DateTime.UtcNow);
+        _schedules.Schedules.Add(sharedSchedule);
+        _schedules.Members.Add(new ScheduleMemberStub(sharedSchedule.Id, OwnerId, ScheduleMemberRole.Viewer));
+        MoveTimeToScheduleStart();
+
+        var task = TaskItem.Create(otherOwner, sharedSchedule.Id, "Z udostępnionego", null, Jan25.AddDays(1), TaskPriority.Medium, TaskItemStatus.ToDo, DateTime.UtcNow);
+        _tasks.Items.Add(task);
+
+        var result = await _service.GetUpcomingAsync(7, 10, CancellationToken.None);
+
+        Assert.Equal("Z udostępnionego", Assert.Single(result).Title);
+    }
+
+    [Fact]
+    public async Task GetUpcoming_ExcludesTasksFromScheduleWithoutAccess()
+    {
+        var foreignSchedule = Schedule.Create(Guid.NewGuid(), "Cudzy", Jan25, Feb14, DateTime.UtcNow);
+        _schedules.Schedules.Add(foreignSchedule);
+        MoveTimeToScheduleStart();
+
+        var task = TaskItem.Create(foreignSchedule.UserId, foreignSchedule.Id, "Cudze", null, Jan25.AddDays(1), TaskPriority.Medium, TaskItemStatus.ToDo, DateTime.UtcNow);
+        _tasks.Items.Add(task);
+
+        var result = await _service.GetUpcomingAsync(7, 10, CancellationToken.None);
+
+        Assert.Empty(result);
+    }
+
+    [Fact]
+    public async Task GetUpcoming_RespectsLimit()
+    {
+        MoveTimeToScheduleStart();
+        for (var i = 1; i <= 5; i++)
+        {
+            await _service.CreateAsync(_schedule.Id, new CreateTaskRequest($"Zadanie {i}", null, Jan25.AddDays(i), null, null), CancellationToken.None);
+        }
+
+        var result = await _service.GetUpcomingAsync(7, 3, CancellationToken.None);
+
+        Assert.Equal(3, result.Count);
+        Assert.Equal(["Zadanie 1", "Zadanie 2", "Zadanie 3"], result.Select(t => t.Title));
+    }
+
     private sealed class TestUser(Guid userId) : ICurrentUser
     {
         public Guid UserId { get; set; } = userId;
@@ -431,7 +532,7 @@ public class TaskServiceTests
 
     private sealed record ScheduleMemberStub(Guid ScheduleId, Guid UserId, ScheduleMemberRole Role);
 
-    private sealed class FakeTaskRepository : ITaskRepository
+    private sealed class FakeTaskRepository(FakeScheduleRepository schedules) : ITaskRepository
     {
         public List<TaskItem> Items { get; } = [];
 
@@ -440,6 +541,23 @@ public class TaskServiceTests
 
         public Task<TaskItem?> GetByIdAsync(Guid id, CancellationToken cancellationToken) =>
             Task.FromResult(Items.FirstOrDefault(t => t.Id == id));
+
+        public Task<IReadOnlyList<TaskItem>> GetUpcomingAsync(Guid userId, DateOnly fromDate, DateOnly toDate, int limit, CancellationToken cancellationToken)
+        {
+            bool HasAccess(Guid scheduleId) =>
+                schedules.Schedules.Any(s => s.Id == scheduleId && s.UserId == userId)
+                || schedules.Members.Any(m => m.ScheduleId == scheduleId && m.UserId == userId);
+
+            IReadOnlyList<TaskItem> result = Items
+                .Where(t => t.DueDate is not null && t.DueDate >= fromDate && t.DueDate <= toDate && t.Status != TaskItemStatus.Done)
+                .Where(t => HasAccess(t.ScheduleId))
+                .OrderBy(t => t.DueDate)
+                .ThenByDescending(t => t.Priority)
+                .Take(limit)
+                .ToList();
+
+            return Task.FromResult(result);
+        }
 
         public Task AddAsync(TaskItem task, CancellationToken cancellationToken)
         {

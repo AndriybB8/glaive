@@ -18,6 +18,8 @@ public interface ITaskRepository
     Task UpdateAsync(TaskItem task, CancellationToken cancellationToken);
 
     Task DeleteAsync(TaskItem task, CancellationToken cancellationToken);
+
+    Task<IReadOnlyList<TaskItem>> GetUpcomingAsync(Guid userId, DateOnly fromDate, DateOnly toDate, int limit, CancellationToken cancellationToken);
 }
 
 /// <summary>

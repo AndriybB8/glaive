@@ -13,6 +13,8 @@ public sealed class TaskService(
     ICurrentUser currentUser,
     TimeProvider timeProvider)
 {
+    private const int DefaultUpcomingDays = 7;
+
     private static readonly TaskError TaskNotFound = new(TaskErrorType.NotFound, "Nie znaleziono zadania.");
     private static readonly TaskError ScheduleNotFound = new(TaskErrorType.NotFound, "Nie znaleziono harmonogramu.");
     private static readonly TaskError Forbidden = new(TaskErrorType.Forbidden, "Masz tylko podgląd tego harmonogramu.");
@@ -177,6 +179,14 @@ public sealed class TaskService(
 
         var scheduleWithAccess = await schedules.GetWithAccessAsync(task.ScheduleId, currentUser.UserId, cancellationToken);
         return scheduleWithAccess is null ? null : (task, scheduleWithAccess.Schedule, scheduleWithAccess.Access);
+    }
+
+    public async Task<IReadOnlyList<TaskDto>> GetUpcomingAsync(int days, int limit, CancellationToken cancellationToken)
+    {
+        var today = DateOnly.FromDateTime(UtcNow());
+        var items = await tasks.GetUpcomingAsync(currentUser.UserId, today, today.AddDays(days), limit, cancellationToken);
+
+        return items.Select(TaskDto.From).ToList();
     }
 
     private async Task<TaskResult<TaskDto>> SaveAsync(TaskItem task, CancellationToken cancellationToken)
