@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { NavTabs } from './components/ui/NavTabs'
+import { CalendarPage } from './features/calendar/CalendarPage'
 import { FilesPage } from './features/files/FilesPage'
 import { NotesPage } from './features/notes/NotesPage'
 import { SchedulesPage } from './features/schedules/SchedulesPage'
@@ -19,6 +20,7 @@ import { clearStoredPomodoro } from './features/pomodoro/pomodoroContext'
 const pages = [
   { id: 'notatki', label: 'Notatki' },
   { id: 'harmonogramy', label: 'Harmonogramy' },
+  { id: 'kalendarz', label: 'Kalendarz' },
   { id: 'listy', label: 'Listy' },
   { id: 'pomodoro', label: 'Pomodoro' },
   { id: 'tagi', label: 'Tagi' },
@@ -77,6 +79,8 @@ function App() {
         <div className="min-h-0 flex-1">
           {page === 'harmonogramy' ? (
             <SchedulesPage />
+          ) : page === 'kalendarz' ? (
+            <CalendarPage />
           ) : page === 'pomodoro' ? (
             <PomodoroPage />
           ) : page === 'tagi' ? (
