@@ -12,13 +12,13 @@ public class EfTagRepository(AppDbContext db) : ITagRepository
     {
         return await db.Tags
             .AsNoTracking()
-            .Where(t => t.UserId == userId)
+            .Where(t => t.ScheduleId == userId)
             .ToListAsync(cancellationToken);
     }
 
     public Task<Tag?> GetByIdAsync(Guid id, Guid userId, CancellationToken cancellationToken)
     {
-        return db.Tags.FirstOrDefaultAsync(t => t.Id == id && t.UserId == userId, cancellationToken);
+        return db.Tags.FirstOrDefaultAsync(t => t.Id == id && t.ScheduleId == userId, cancellationToken);
     }
 
     public async Task AddAsync(Tag tag, CancellationToken cancellationToken)

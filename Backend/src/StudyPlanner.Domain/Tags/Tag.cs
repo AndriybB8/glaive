@@ -8,7 +8,7 @@ public class Tag
     public const int NameMaxLength = 50;
 
     public Guid Id { get; private set; }
-    public Guid UserId { get; private set; }
+    public Guid ScheduleId { get; private set; }
 
     public string Name { get; private set; } = string.Empty;
     public string Color { get; private set; } = string.Empty;
@@ -20,7 +20,7 @@ public class Tag
 
     private Tag(){}
 
-    public static Tag Create(Guid userId, string name, string color, DateTime utcNow)
+    public static Tag Create(Guid scheduleId, string name, string color, DateTime utcNow)
     {
         EnsureUtc(utcNow);
         EnsureValid(name, color);
@@ -28,7 +28,7 @@ public class Tag
         return new Tag
         {
             Id = Guid.NewGuid(),
-            UserId = userId,
+            ScheduleId = scheduleId,
             Name = name,
             Color = color,
             CreatedAt = utcNow,
