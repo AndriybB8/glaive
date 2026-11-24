@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
+using StudyPlanner.Domain.Schedules;
 using StudyPlanner.Domain.Tags;
 using StudyPlanner.Domain.Users;
 
@@ -14,16 +15,16 @@ public class TagConfiguration : IEntityTypeConfiguration<Tag>
         builder.HasKey(t => t.Id).HasName("pk_tags");
         builder.Property(t => t.Id).HasColumnName("id").ValueGeneratedNever();
 
-        builder.Property(t => t.UserId).HasColumnName("user_id");
-        builder.HasOne<User>()
+        builder.Property(t => t.ScheduleId).HasColumnName("schedule_id");
+        builder.HasOne<Schedule>()
             .WithMany()
-            .HasForeignKey(t => t.UserId)
-            .HasConstraintName("fk_tags_users_user_id")
+            .HasForeignKey(t => t.ScheduleId)
+            .HasConstraintName("fk_tags_schedules_schedule_id")
             .OnDelete(DeleteBehavior.Cascade);
 
         builder.Property(t => t.Name).HasColumnName("name").HasMaxLength(Tag.NameMaxLength).IsRequired();
 
-        builder.HasIndex(t => new {t.UserId, t.Name}).IsUnique().HasDatabaseName("ux_tags_user_id_name");
+        builder.HasIndex(t => new {t.ScheduleId, t.Name}).IsUnique().HasDatabaseName("ux_tags_schedule_id_name");
 
         builder.Property(t => t.Color).HasColumnName("color").HasMaxLength(7).IsRequired();
 

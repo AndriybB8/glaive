@@ -467,13 +467,13 @@ namespace StudyPlanner.Infrastructure.Persistence.Migrations
                         .HasColumnType("character varying(50)")
                         .HasColumnName("name");
 
+                    b.Property<Guid>("ScheduleId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("schedule_id");
+
                     b.Property<DateTime>("UpdatedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("updated_at");
-
-                    b.Property<Guid>("UserId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("user_id");
 
                     b.Property<int>("Version")
                         .IsConcurrencyToken()
@@ -483,9 +483,9 @@ namespace StudyPlanner.Infrastructure.Persistence.Migrations
                     b.HasKey("Id")
                         .HasName("pk_tags");
 
-                    b.HasIndex("UserId", "Name")
+                    b.HasIndex("ScheduleId", "Name")
                         .IsUnique()
-                        .HasDatabaseName("ux_tags_user_id_name");
+                        .HasDatabaseName("ux_tags_schedule_id_name");
 
                     b.ToTable("tags", (string)null);
                 });
@@ -866,12 +866,12 @@ namespace StudyPlanner.Infrastructure.Persistence.Migrations
 
             modelBuilder.Entity("StudyPlanner.Domain.Tags.Tag", b =>
                 {
-                    b.HasOne("StudyPlanner.Domain.Users.User", null)
+                    b.HasOne("StudyPlanner.Domain.Schedules.Schedule", null)
                         .WithMany()
-                        .HasForeignKey("UserId")
+                        .HasForeignKey("ScheduleId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired()
-                        .HasConstraintName("fk_tags_users_user_id");
+                        .HasConstraintName("fk_tags_schedules_schedule_id");
                 });
 
             modelBuilder.Entity("StudyPlanner.Domain.TaskTags.TaskTag", b =>
