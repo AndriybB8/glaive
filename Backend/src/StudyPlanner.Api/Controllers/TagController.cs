@@ -4,7 +4,7 @@ using StudyPlanner.Application.Tags;
 namespace StudyPlanner.Api.Controllers;
 
 [ApiController]
-[Route("api/tags")]
+[Route("api/schedules/{scheduleId:guid}/tags")]
 public class TagController(TagService tagService) : ControllerBase
 {
     [HttpGet]
