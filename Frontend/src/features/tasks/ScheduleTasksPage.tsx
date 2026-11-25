@@ -16,6 +16,7 @@ import type { Schedule } from '../schedules/types'
 import { can, canLeave } from '../sharing/permissions'
 import { ACCESS_LABELS } from '../sharing/sharing'
 import { getTags } from '../tags/api'
+import { ScheduleTagsDialog } from '../tags/ScheduleTagsDialog'
 import { TagChip } from '../tags/TagChip'
 import type { Tag } from '../tags/types'
 import { getTagsForTasks, getTaskTags } from '../taskTags/api'
@@ -187,9 +188,10 @@ export function ScheduleTasksPage({
   /** Numer ostatniego zapytania filtru – odpowiedź na starsze (szybkie klikanie) ignorujemy. */
   const filterRequestRef = useRef(0)
 
+  // Tagi tego harmonogramu (SCRUM-160): do filtru, wyboru przy zadaniu i okna „Tagi”.
   useEffect(() => {
     let ignore = false
-    getTags()
+    getTags(schedule.id)
       .then((result) => {
         if (!ignore) setAllTags(result)
       })
@@ -197,7 +199,9 @@ export function ScheduleTasksPage({
     return () => {
       ignore = true
     }
-  }, [])
+  }, [schedule.id])
+
+  const [tagsDialogOpen, setTagsDialogOpen] = useState(false)
 
   const runFilter = (tagIds: string[]) => {
     const requestId = ++filterRequestRef.current
@@ -232,6 +236,25 @@ export function ScheduleTasksPage({
   const clearFilter = () => {
     setFilterTagIds([])
     runFilter([])
+  }
+
+  /**
+   * Zmiany z okna „Tagi”: nowa nazwa albo kolor od razu na etykietach zadań, usunięty tag znika z zadań i z filtru
+   * (backend usuwa jego przypisania razem z nim).
+   */
+  const handleTagsChange = (next: Tag[]) => {
+    setAllTags(next)
+    const byId = new Map(next.map((t) => [t.id, t]))
+    setTagsByTask((current) =>
+      Object.fromEntries(
+        Object.entries(current).map(([taskId, tags]) => [taskId, tags.flatMap((t) => (byId.has(t.id) ? [byId.get(t.id)!] : []))]),
+      ),
+    )
+    const remaining = filterTagIds.filter((id) => byId.has(id))
+    if (remaining.length !== filterTagIds.length) {
+      setFilterTagIds(remaining)
+      runFilter(remaining)
+    }
   }
 
   /** Po zmianach w zadaniach (nowe, edycja tagów) wynik filtru może być nieaktualny – pytamy backend jeszcze raz. */
@@ -283,6 +306,8 @@ export function ScheduleTasksPage({
       setTasks(fresh)
       setLoadError(null)
       setTagsByTask(await getTagsForTasks(fresh.map((t) => t.id)))
+      // Tagi mogła zmienić inna osoba z dostępem (backend nie wysyła osobnej wiadomości o tagach).
+      setAllTags(await getTags(schedule.id))
     } catch (error) {
       // 403/404: dostęp odebrano albo harmonogram usunięto – lista harmonogramów sprawdzi to i zamknie widok.
       if (error instanceof ApiError && (error.status === 403 || error.status === 404)) onAccessChanged()
@@ -424,6 +449,11 @@ export function ScheduleTasksPage({
             </Button>
           )}
           {canEdit && (
+            <Button variant="secondary" onClick={() => setTagsDialogOpen(true)} disabled={loadError === SCHEDULE_GONE}>
+              Tagi
+            </Button>
+          )}
+          {canEdit && (
             <Button onClick={() => setDialog({ kind: 'create' })} disabled={loadError === SCHEDULE_GONE}>
               Nowe zadanie
             </Button>
@@ -544,6 +574,16 @@ export function ScheduleTasksPage({
       {tasks !== null && <ScheduleHistory entries={history} meId={meId} />}
 
       {/* Okna zmian tylko przy uprawnieniu do edycji – po odebraniu go (np. 403 gdzie indziej) znikają same. */}
+      {canEdit && tagsDialogOpen && (
+        <ScheduleTagsDialog
+          scheduleId={schedule.id}
+          scheduleName={schedule.name}
+          tags={allTags}
+          onTagsChange={handleTagsChange}
+          onClose={() => setTagsDialogOpen(false)}
+        />
+      )}
+
       {canEdit && dialog?.kind === 'create' && (
         <TaskFormDialog
           schedule={schedule}
