@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { NavTabs } from './components/ui/NavTabs'
 import { CalendarPage } from './features/calendar/CalendarPage'
+import { DashboardPage } from './features/dashboard/DashboardPage'
 import { FilesPage } from './features/files/FilesPage'
 import { NotesPage } from './features/notes/NotesPage'
 import { SchedulesPage } from './features/schedules/SchedulesPage'
@@ -18,6 +19,7 @@ import { clearStoredPomodoro } from './features/pomodoro/pomodoroContext'
 
 
 const pages = [
+  { id: 'pulpit', label: 'Pulpit' },
   { id: 'notatki', label: 'Notatki' },
   { id: 'harmonogramy', label: 'Harmonogramy' },
   { id: 'kalendarz', label: 'Kalendarz' },
@@ -31,7 +33,7 @@ type PageId = (typeof pages)[number]['id']
 
 function pageFromHash(): PageId {
   const id = window.location.hash.slice(1)
-  return pages.find((page) => page.id === id)?.id ?? 'notatki'
+  return pages.find((page) => page.id === id)?.id ?? 'pulpit'
 }
 
 // Prosta nawigacja po adresie z „#” (#notatki, #harmonogramy) – odświeżenie strony zostawia ten sam widok.
@@ -77,7 +79,9 @@ function App() {
           }
         />
         <div className="min-h-0 flex-1">
-          {page === 'harmonogramy' ? (
+          {page === 'pulpit' ? (
+            <DashboardPage />
+          ) : page === 'harmonogramy' ? (
             <SchedulesPage />
           ) : page === 'kalendarz' ? (
             <CalendarPage />
