@@ -1,26 +1,28 @@
 import { ConflictError, request } from '../../lib/http'
 import type { Tag, TagDraft } from './types'
 
-const BASE_URL = '/api/tags'
+/** Tagi należą do harmonogramu: każdy harmonogram ma własny zestaw (SCRUM-160). */
+const tagsUrl = (scheduleId: string) => `/api/schedules/${scheduleId}/tags`
 
-/** Tag zmieniono w innym miejscu (np. w drugiej karcie). */
+/** Tag zmieniono w innym miejscu (np. w drugiej karcie albo przez inną osobę z dostępem do harmonogramu). */
 export function isTagConflict(error: unknown): error is ConflictError<Tag> {
   return error instanceof ConflictError
 }
 
-/** Tagi użytkownika posortowane alfabetycznie (sortuje backend). */
-export function getTags(): Promise<Tag[]> {
-  return request(BASE_URL)
+/** Tagi harmonogramu posortowane alfabetycznie (sortuje backend). Widzi je każdy z dostępem do harmonogramu. */
+export function getTags(scheduleId: string): Promise<Tag[]> {
+  return request(tagsUrl(scheduleId))
 }
 
-export function createTag(draft: TagDraft): Promise<Tag> {
-  return request(BASE_URL, { method: 'POST', body: JSON.stringify(draft) })
+/** Tworzenie, zmiana i usuwanie – tylko przy uprawnieniu do edycji harmonogramu (inaczej 403). */
+export function createTag(scheduleId: string, draft: TagDraft): Promise<Tag> {
+  return request(tagsUrl(scheduleId), { method: 'POST', body: JSON.stringify(draft) })
 }
 
-export function updateTag(id: string, draft: TagDraft, version: number): Promise<Tag> {
-  return request(`${BASE_URL}/${id}`, { method: 'PUT', body: JSON.stringify({ ...draft, version }) })
+export function updateTag(scheduleId: string, id: string, draft: TagDraft, version: number): Promise<Tag> {
+  return request(`${tagsUrl(scheduleId)}/${id}`, { method: 'PUT', body: JSON.stringify({ ...draft, version }) })
 }
 
-export function deleteTag(id: string): Promise<void> {
-  return request(`${BASE_URL}/${id}`, { method: 'DELETE' })
+export function deleteTag(scheduleId: string, id: string): Promise<void> {
+  return request(`${tagsUrl(scheduleId)}/${id}`, { method: 'DELETE' })
 }

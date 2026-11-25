@@ -23,13 +23,7 @@ export function TaskTagPicker({ tags, selectedIds, onToggle, loadError, disabled
           Wczytywanie…
         </p>
       ) : tags.length === 0 ? (
-        <p className="text-sm text-slate-500">
-          Nie masz jeszcze tagów. Utworzysz je w zakładce{' '}
-          <a href="#tagi" className="font-medium text-blue-700 hover:underline">
-            Tagi
-          </a>
-          .
-        </p>
+        <p className="text-sm text-slate-500">Ten harmonogram nie ma jeszcze tagów. Dodasz je przyciskiem „Tagi” nad listą zadań.</p>
       ) : (
         <div className="flex flex-wrap gap-1.5">
           {tags.map((tag) => (

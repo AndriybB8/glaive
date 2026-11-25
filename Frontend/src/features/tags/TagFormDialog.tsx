@@ -14,6 +14,8 @@ import type { Tag } from './types'
 const NAME_MAX_LENGTH = 50
 
 interface TagFormDialogProps {
+  /** Harmonogram, do którego należy tag. */
+  scheduleId: string
   /** Brak = tworzenie nowego tagu. */
   tag?: Tag
   /** Pozostałe tagi – żeby od razu podpowiedzieć, że nazwa jest zajęta. */
@@ -24,7 +26,7 @@ interface TagFormDialogProps {
   onChangedElsewhere: (current: Tag | { deletedId: string }) => void
 }
 
-export function TagFormDialog({ tag, existingTags, onClose, onSaved, onChangedElsewhere }: TagFormDialogProps) {
+export function TagFormDialog({ scheduleId, tag, existingTags, onClose, onSaved, onChangedElsewhere }: TagFormDialogProps) {
   const [name, setName] = useState(tag?.name ?? '')
   const [color, setColor] = useState(tag?.color ?? DEFAULT_TAG_COLOR)
   const [version, setVersion] = useState(tag?.version ?? 0)
@@ -50,7 +52,7 @@ export function TagFormDialog({ tag, existingTags, onClose, onSaved, onChangedEl
     setSaveError(null)
     try {
       const draft = { name: trimmed, color }
-      const saved = tag ? await updateTag(tag.id, draft, version) : await createTag(draft)
+      const saved = tag ? await updateTag(scheduleId, tag.id, draft, version) : await createTag(scheduleId, draft)
       onSaved(saved)
     } catch (error) {
       if (isTagConflict(error)) {
@@ -61,6 +63,8 @@ export function TagFormDialog({ tag, existingTags, onClose, onSaved, onChangedEl
       } else if (tag && error instanceof ApiError && error.status === 404) {
         setSaveError('Ten tag został w międzyczasie usunięty.')
         onChangedElsewhere({ deletedId: tag.id })
+      } else if (error instanceof ApiError && error.status === 403) {
+        setSaveError('Masz już tylko podgląd tego harmonogramu – nie możesz zmieniać tagów.')
       } else if (error instanceof ApiError && error.status === 400) {
         setSaveError(error.message)
       } else {

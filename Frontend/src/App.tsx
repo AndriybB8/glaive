@@ -5,7 +5,6 @@ import { DashboardPage } from './features/dashboard/DashboardPage'
 import { FilesPage } from './features/files/FilesPage'
 import { NotesPage } from './features/notes/NotesPage'
 import { SchedulesPage } from './features/schedules/SchedulesPage'
-import { TagsPage } from './features/tags/TagsPage'
 import { TodoListsPage } from './features/todo/TodoListsPage'
 import {RegisterPage} from "./features/auth/RegisterPage.tsx";
 import {LoginPage} from './features/auth/LoginPage'
@@ -25,7 +24,6 @@ const pages = [
   { id: 'kalendarz', label: 'Kalendarz' },
   { id: 'listy', label: 'Listy' },
   { id: 'pomodoro', label: 'Pomodoro' },
-  { id: 'tagi', label: 'Tagi' },
   { id: 'pliki', label: 'Pliki' },
 ] as const
 
@@ -87,8 +85,6 @@ function App() {
             <CalendarPage />
           ) : page === 'pomodoro' ? (
             <PomodoroPage />
-          ) : page === 'tagi' ? (
-            <TagsPage />
           ) : page === 'listy' ? (
             <TodoListsPage />
           ) : page === 'pliki' ? (

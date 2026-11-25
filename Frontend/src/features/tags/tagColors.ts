@@ -41,3 +41,8 @@ export function readableTextColor(background: string): string {
   // Kontrast z białym vs z czarnym – wybieramy większy.
   return (1.05 / (luminance + 0.05)) >= ((luminance + 0.05) / 0.05) ? '#ffffff' : '#0f172a'
 }
+
+/** Ta sama kolejność co z backendu (TagService): alfabetycznie, bez względu na wielkość liter. */
+export function sortTags<T extends { name: string }>(tags: readonly T[]): T[] {
+  return [...tags].sort((a, b) => a.name.localeCompare(b.name, 'pl', { sensitivity: 'base' }))
+}

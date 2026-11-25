@@ -7,12 +7,13 @@ import { deleteTag } from './api'
 import type { Tag } from './types'
 
 interface DeleteTagDialogProps {
+  scheduleId: string
   tag: Tag
   onClose: () => void
   onDeleted: (id: string) => void
 }
 
-export function DeleteTagDialog({ tag, onClose, onDeleted }: DeleteTagDialogProps) {
+export function DeleteTagDialog({ scheduleId, tag, onClose, onDeleted }: DeleteTagDialogProps) {
   const [deleting, setDeleting] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -20,7 +21,7 @@ export function DeleteTagDialog({ tag, onClose, onDeleted }: DeleteTagDialogProp
     setDeleting(true)
     setError(null)
     try {
-      await deleteTag(tag.id)
+      await deleteTag(scheduleId, tag.id)
       onDeleted(tag.id)
     } catch (err) {
       // Już usunięty (np. w drugiej karcie) – efekt jest ten sam.
@@ -28,7 +29,7 @@ export function DeleteTagDialog({ tag, onClose, onDeleted }: DeleteTagDialogProp
         onDeleted(tag.id)
         return
       }
-      setError('Nie udało się usunąć tagu.')
+      setError(err instanceof ApiError && err.status === 403 ? 'Masz już tylko podgląd tego harmonogramu.' : 'Nie udało się usunąć tagu.')
       setDeleting(false)
     }
   }
@@ -37,7 +38,7 @@ export function DeleteTagDialog({ tag, onClose, onDeleted }: DeleteTagDialogProp
     <Dialog
       confirm
       title={`Usunąć tag „${tag.name}”?`}
-      description="Tej operacji nie można cofnąć."
+      description="Tag zniknie ze wszystkich zadań tego harmonogramu. Tej operacji nie można cofnąć."
       onClose={onClose}
       busy={deleting}
       footer={

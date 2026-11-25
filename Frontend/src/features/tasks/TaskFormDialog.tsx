@@ -78,7 +78,7 @@ export function TaskFormDialog({ schedule, task, onClose, onSaved, onChangedElse
 
   useEffect(() => {
     let ignore = false
-    Promise.all([getTags(), task ? getTaskTags(task.id) : Promise.resolve([])])
+    Promise.all([getTags(schedule.id), task ? getTaskTags(task.id) : Promise.resolve([])])
       .then(([tags, current]) => {
         if (ignore) return
         const ids = current.map((t) => t.id)
@@ -92,7 +92,7 @@ export function TaskFormDialog({ schedule, task, onClose, onSaved, onChangedElse
     return () => {
       ignore = true
     }
-  }, [task])
+  }, [task, schedule.id])
 
   const toggleTag = (tagId: string) =>
     setSelectedTagIds((current) => {
