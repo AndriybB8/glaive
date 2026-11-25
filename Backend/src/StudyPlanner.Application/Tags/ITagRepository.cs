@@ -4,9 +4,9 @@ namespace StudyPlanner.Application.Tags;
 
 public interface ITagRepository
 {
-    Task<IReadOnlyList<Tag>> GetByUserAsync(Guid userId, CancellationToken cancellationToken);
+    Task<IReadOnlyList<Tag>> GetByScheduleAsync(Guid scheduleId, CancellationToken cancellationToken);
 
-    Task<Tag?> GetByIdAsync(Guid id, Guid userId, CancellationToken cancellationToken);
+    Task<Tag?> GetByIdAsync(Guid id, Guid scheduleId, CancellationToken cancellationToken);
 
     Task AddAsync(Tag tag, CancellationToken cancellationToken);
 

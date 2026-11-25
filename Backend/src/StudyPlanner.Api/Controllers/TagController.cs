@@ -4,45 +4,46 @@ using StudyPlanner.Application.Tags;
 namespace StudyPlanner.Api.Controllers;
 
 [ApiController]
-[Route("api/tags")]
+[Route("api/schedules/{scheduleId:guid}/tags")]
 public class TagController(TagService tagService) : ControllerBase
 {
     [HttpGet]
-    public async Task<ActionResult<IReadOnlyList<TagDto>>> GetAll(CancellationToken cancellationToken)
+    public async Task<ActionResult<IReadOnlyList<TagDto>>> GetBySchedule(Guid scheduleId, CancellationToken cancellationToken)
     {
-        return Ok(await tagService.GetAllAsync(cancellationToken));
+        var res = await tagService.GetByScheduleAsync(scheduleId, cancellationToken);
+        return res.IsSuccess ? Ok(res.Value) : ToErrorResponse(res.Error!);
     }
 
     [HttpGet("{id:guid}")]
-    public async Task<ActionResult<TagDto>> GetById(Guid id, CancellationToken cancellationToken)
+    public async Task<ActionResult<TagDto>> GetById(Guid scheduleId, Guid id, CancellationToken cancellationToken)
     {
-        var res = await tagService.GetByIdAsync(id, cancellationToken);
+        var res = await tagService.GetByIdAsync(scheduleId, id, cancellationToken);
         return res.IsSuccess ? Ok(res.Value) : ToErrorResponse(res.Error!);
     }
 
     [HttpPost]
-    public async Task<ActionResult<TagDto>> Create(CreateTagRequest req, CancellationToken cancellationToken)
+    public async Task<ActionResult<TagDto>> Create(Guid scheduleId, CreateTagRequest req, CancellationToken cancellationToken)
     {
-        var res = await tagService.CreateAsync(req, cancellationToken);
+        var res = await tagService.CreateAsync(scheduleId, req, cancellationToken);
         if (!res.IsSuccess)
         {
             return ToErrorResponse(res.Error!);
         }
-        return CreatedAtAction(nameof(GetById), new { id = res.Value!.Id }, res.Value);
+        return CreatedAtAction(nameof(GetById), new { scheduleId, id = res.Value!.Id }, res.Value);
     }
 
     [HttpPut("{id:guid}")]
-    public async Task<ActionResult<TagDto>> Update(Guid id, UpdateTagRequest req,
+    public async Task<ActionResult<TagDto>> Update(Guid scheduleId, Guid id, UpdateTagRequest req,
         CancellationToken cancellationToken)
     {
-        var res = await tagService.UpdateAsync(id, req, cancellationToken);
+        var res = await tagService.UpdateAsync(scheduleId, id, req, cancellationToken);
         return res.IsSuccess ? Ok(res.Value) : ToErrorResponse(res.Error!);
     }
 
     [HttpDelete("{id:guid}")]
-    public async Task<IActionResult> Delete(Guid id, CancellationToken cancellationToken)
+    public async Task<IActionResult> Delete(Guid scheduleId, Guid id, CancellationToken cancellationToken)
     {
-        var result = await tagService.DeleteAsync(id, cancellationToken);
+        var result = await tagService.DeleteAsync(scheduleId, id, cancellationToken);
         return result.IsSuccess ? NoContent() : ToErrorResponse(result.Error!);
     }
 
@@ -53,6 +54,7 @@ public class TagController(TagService tagService) : ControllerBase
         {
             TagErrorType.NotFound => StatusCodes.Status404NotFound,
             TagErrorType.Conflict => StatusCodes.Status409Conflict,
+            TagErrorType.Forbidden => StatusCodes.Status403Forbidden,
             _ => StatusCodes.Status400BadRequest,
         };
 

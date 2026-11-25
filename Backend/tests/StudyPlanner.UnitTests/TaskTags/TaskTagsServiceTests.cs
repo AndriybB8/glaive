@@ -39,7 +39,7 @@ public class TaskTagServiceTests
         _task = TaskItem.Create(OwnerId, _schedule.Id, "Zadanie", null, null, TaskPriority.Medium, TaskItemStatus.ToDo, DateTime.UtcNow);
         _taskRepository.Tasks.Add(_task);
 
-        _tag = Tag.Create(OwnerId, "Matematyka", "#3B82F6", DateTime.UtcNow);
+        _tag = Tag.Create(_schedule.Id, "Matematyka", "#3B82F6", DateTime.UtcNow);
         _tagRepository.Tags.Add(_tag);
     }
 
@@ -67,7 +67,7 @@ public class TaskTagServiceTests
     }
 
     [Fact]
-    public async Task Assign_WithTagOfAnotherUser_ReturnsNotFound()
+    public async Task Assign_WithTagFromAnotherSchedule_ReturnsNotFound()
     {
         var foreignTag = Tag.Create(Guid.NewGuid(), "Cudzy", "#FF0000", DateTime.UtcNow);
         _tagRepository.Tags.Add(foreignTag);
@@ -115,14 +115,14 @@ public class TaskTagServiceTests
     }
 
     [Fact]
-    public async Task Assign_ByEditor_WithOwnersTag_CurrentlyReturnsNotFound()
+    public async Task Assign_ByEditor_WithScheduleTag_Succeeds()
     {
         ShareWith(FriendId, ScheduleMemberRole.Editor);
         _currentUser.UserId = FriendId;
 
         var result = await _service.AssignAsync(_task.Id, _tag.Id, CancellationToken.None);
 
-        Assert.Equal(TaskTagErrorType.NotFound, result.Error!.Type);
+        Assert.True(result.IsSuccess);
     }
 
     [Fact]
@@ -263,11 +263,11 @@ public class TaskTagServiceTests
     {
         public List<Tag> Tags { get; } = [];
 
-        public Task<IReadOnlyList<Tag>> GetByUserAsync(Guid userId, CancellationToken cancellationToken) =>
-            Task.FromResult<IReadOnlyList<Tag>>(Tags.Where(t => t.UserId == userId).ToList());
+        public Task<IReadOnlyList<Tag>> GetByScheduleAsync(Guid scheduleId, CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlyList<Tag>>(Tags.Where(t => t.ScheduleId == scheduleId).ToList());
 
-        public Task<Tag?> GetByIdAsync(Guid id, Guid userId, CancellationToken cancellationToken) =>
-            Task.FromResult(Tags.FirstOrDefault(t => t.Id == id && t.UserId == userId));
+        public Task<Tag?> GetByIdAsync(Guid id, Guid scheduleId, CancellationToken cancellationToken) =>
+            Task.FromResult(Tags.FirstOrDefault(t => t.Id == id && t.ScheduleId == scheduleId));
 
         public Task AddAsync(Tag tag, CancellationToken cancellationToken)
         {

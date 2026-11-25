@@ -30,7 +30,7 @@ public class TaskTagService(
         if (found is null) return TaskTagResult<bool>.Failure(new TaskTagError(TaskTagErrorType.NotFound, "Nie znaleziono zadania."));
         if (!found.Value.Access.Can(Permission.EditContent)) return TaskTagResult<bool>.Failure(new (TaskTagErrorType.Forbidden, "Masz tylko podgląd tego harmonogramu."));
 
-        var tag = await tags.GetByIdAsync(tagId, currentUser.UserId, cancellationToken);
+        var tag = await tags.GetByIdAsync(tagId, found.Value.Task.ScheduleId, cancellationToken);
         if (tag is null)
             return TaskTagResult<bool>.Failure(new(TaskTagErrorType.NotFound, "Nie znaleziono tagu."));
 
@@ -50,7 +50,7 @@ public class TaskTagService(
         if (found is null) return TaskTagResult<bool>.Failure(new TaskTagError(TaskTagErrorType.NotFound, "Nie znaleziono zadania."));
         if (!found.Value.Access.Can(Permission.EditContent)) return TaskTagResult<bool>.Failure(new TaskTagError(TaskTagErrorType.Forbidden, "Masz tylko podgląd tego harmonogramu."));
 
-        var tag = await tags.GetByIdAsync(tagId, currentUser.UserId, cancellationToken);
+        var tag = await tags.GetByIdAsync(tagId, found.Value.Task.ScheduleId, cancellationToken);
         if (tag is null) return TaskTagResult<bool>.Failure(new TaskTagError(TaskTagErrorType.NotFound, "Nie znaleziono tagu."));
 
         if (await taskTags.ExistsAsync(taskId, tagId, cancellationToken))
